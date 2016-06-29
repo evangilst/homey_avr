@@ -1,0 +1,178 @@
+{
+    "pair": {
+        "config": {
+            "title":      "Marantz AVR configuration setup.",
+            "ipaddress":  "IP adres :",
+            "type":       "AVR type :",
+            "name":       "Naam van de avr",
+            "saveit":     "Sla configuraie op.",
+            "message":    "",
+            "emptyType":  "Geen AVR type geselecteerd !.",
+            "emptyName":  "Geen naam gegeven !.",
+            "emptyIP":    "Geen IP adres gegeven !.",
+            "invalidIP":  "Invalide IPV4 adres gegeven !.",
+            "invalidPort":  "Invalide Port gegeven !.",
+            "required":   "Invalide parameters gedecteerd!."
+        }
+    },
+    "error": {
+        "cmdnf":          "Command niet gevonden in het AVR config bestand.",
+        "dev_mis_del":    "Slot geslecteeerd heeft geen AVR geconfigureerd bij verwideren.",
+        "full_dev_ar":    "Geen vrije plaatsen meer voor een nieuwe AVR: device array vol.",
+        "devnotavail":    "AVR is op het ogenblijk niet beschikbaar, i.e geen verbinding met AVR.",
+        "devnotused":     "Slot heeft geen valide AVR geconfigureerd.",
+        "invalidIP":      "Invalide IP adres.",
+        "invalidPort":    "Invalide network port.",
+        "devnotsel":      "Selecteerd een AVR eerst !.",
+        "devnotconf":     "AVR- configuratie nog niet geladen."
+    },
+    "power": {
+        "on":             "AVR aan",
+        "off":            "AVR uit/standby"
+    },
+    "mzpower": {
+        "on":             "Main zone power aan",
+        "off":            "Main zone power uit"
+    },
+    "mute": {
+        "on":             "Mute aan",
+        "off":            "Mute uit"
+    },
+    "inputsource": {
+        "phono":          "Gramafoon",
+        "cd":             "CD speler",
+        "dvd":            "DVD speler",
+        "bd":             "Bluray speler",
+        "tv":             "TV",
+        "sat_cbl":        "Sateliet/Kabel",
+        "sat":            "Sateliet",
+        "mplay":          "Media speler",
+        "vcr":            "VCR speler" ,
+        "game":           "Game console",
+        "v_aux":          "Video/aux",
+        "tuner":          "Tuner",
+        "spotify":        "Spotify",
+        "napster":        "Napster",
+        "flickr":         "Flickr",
+        "iradio":         "Internet radio",
+        "server":         "Server",
+        "favorites":      "Favorites",
+        "cdr":            "CDR speler",
+        "aux1":           "AUX1",
+        "aux2":           "AUX2",
+        "aux3":           "AUX3",
+        "aux4":           "AUX4",
+        "aux5":           "AUX5",
+        "aux6":           "AUX6",
+        "aux7":           "AUX7",
+        "net":            "Online music",
+        "net_usb":        "Net_USB",
+        "bt":             "Bluetooth",
+        "mxport":         "MXport",
+        "usb_ipod":       "Usb-IPOD",
+        "usb":            "USB",
+        "ipd":            "IPOD",
+        "irp":            "Internet Radion and recent play",
+        "fvp":            "Online music and play favorite",
+        "otp":            "One Touch Play"
+    },
+    "surround": {
+        "movie":          "Movie",
+        "music":          "Music",
+        "game":           "Game console",
+        "direct":         "Direct",
+        "pure":           "Direct pure",
+        "stereo":         "Stereo",
+        "auto":           "Auto",
+        "neural":         "Neural",
+        "standard":       "Standard",
+        "dolby":          "Dolby digital",
+        "dts":            "DTS",
+        "mchstereo":      "Multi chanel stereo",
+        "matrix":         "Matrix",
+        "virtual":        "Virtual",
+        "left":           "Left",
+        "right":          "Right"
+    },
+    "eco": {
+        "on":             "Aan",
+        "off":            "Uit",
+        "auto":           "Auto",
+        "ns":             "Not supported"
+    },
+    "event": {
+        "power": {
+            "on":         "is aangezet",
+            "off":        "is uitgezet"
+        },
+        "mzpower": {
+            "on":         "main zone power is aangezet",
+            "off":        "main zone power is uitgezet"
+        },
+        "mute": {
+            "on":         "mute aangezet",
+            "off":        "mute uitgezet"
+        },
+        "eco": {
+            "on":         "eco mode aangezet",
+            "off":        "eco mode uitgezet",
+            "auto":       "auto eco mode aangezet"
+        },
+        "inputsource": {
+            "phono":          "heeft gramaphone geselecteerd  als input source",
+            "cd":             "heeft CD speler geselecteerd  als input source",
+            "dvd":            "heeft DVD speler geselecteerd  als input source",
+            "bd":             "heeft Bluray speler geselecteerd  als input source",
+            "tv":             "heeft TV geselecteerd  als input source",
+            "sat_cbl":        "heeft satelite/cable geselecteerd  als input source",
+            "sat":            "heeft satelite geselecteerd  als input source",
+            "mplay":          "heeft media speler geselecteerd  als input source",
+            "vcr":            "heeft VCR speler geselecteerd  als input source" ,
+            "game":           "heeft game console geselecteerd  als input source",
+            "v_aux":          "heeft video/aux geselecteerd  als input source",
+            "tuner":          "heeft tuner geselecteerd  als input source",
+            "spotify":        "heeft spotify geselecteerd  als input source",
+            "napster":        "heeft napster geselecteerd  als input source",
+            "flickr":         "heeft flickr geselecteerd  als input source",
+            "iradio":         "heeft internet radio geselecteerd  als input source",
+            "server":         "heeft server geselecteerd  als input source",
+            "favorites":      "heeft favorites geselecteerd  als input source",
+            "cdr":            "heeft CDR speler geselecteerd  als input source",
+            "aux1":           "heeft AUX1 geselecteerd  als input source",
+            "aux2":           "heeft AUX2 geselecteerd  als input source",
+            "aux3":           "heeft AUX3 geselecteerd  als input source",
+            "aux4":           "heeft AUX4 geselecteerd  als input source",
+            "aux5":           "heeft AUX5 geselecteerd  als input source",
+            "aux6":           "heeft AUX6 geselecteerd  als input source",
+            "aux7":           "heeft AUX7 geselecteerd  als input source",
+            "net":            "heeft Online music geselecteerd  als input source",
+            "net_usb":        "heeft net_USB geselecteerd  als input source",
+            "bt":             "heeft bluetooth geselecteerd  als input source",
+            "mxport":         "heeft MXport geselecteerd  als input source",
+            "usb_ipod":       "heeft usb-IPOD geselecteerd  als input source",
+            "usb":            "heeft USB geselecteerd  als input source",
+            "ipd":            "heeft IPOD geselecteerd  als input source",
+            "irp":            "heeft Internet Radion and recent play geselecteerd  als input source",
+            "fvp":            "heeft Online music and play favorite geselecteerd  als input source",
+            "otp":            "heeft One Touch Play geselecteerd  als input source"
+        },
+            "surround": {
+            "movie":          "heeft surround mode movie geselecteerd",
+            "music":          "heeft surround mode music geselecteerd",
+            "game":           "heeft surround mode game console geselecteerd",
+            "direct":         "heeft surround mode surround direct geselecteerd",
+            "pure":           "heeft surround mode surround direct pure geselecteerd",
+            "stereo":         "heeft surround mode surround stereo geselecteerd",
+            "auto":           "heeft surround mode auto geselecteerd",
+            "neural":         "heeft surround mode neural geselecteerd",
+            "standard":       "heeft surround mode standard geselecteerd",
+            "dolby":          "heeft surround mode dolby digital geselecteerd",
+            "dts":            "heeft surround mode DTS geselecteerd",
+            "mchstereo":      "heeft surround mode multi chanel stereo geselecteerd",
+            "matrix":         "heeft surround mode matrix geselecteerd",
+            "virtual":        "heeft surround mode virtual geselecteerd",
+            "left":           "heeft surround mode left geselecteerd",
+            "right":          "heeft surround mode right geslecteeerd"
+        }
+    }
+}

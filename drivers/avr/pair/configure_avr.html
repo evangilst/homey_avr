@@ -1,0 +1,200 @@
+<script type="text/javascript">
+
+	Homey.setTitle( __("pair.config.title"));
+
+
+    Homey.on('continue', function( success, callback) {
+        Homey.showView('list_devices');
+    })
+
+	function  validateIPV4( addres ) {
+
+        if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(addres))  {
+
+            return true;
+        }
+        return false;
+    }
+
+	function checkIP() {
+		var inputStr = $("#avrip").val();
+
+		var inputAr = inputStr.split(":");
+
+		var inputIP = inputAr[0];
+
+		if ( validateIPV4( inputIP ) ) {
+			console.log("checkip (", inputIP, ") returned: valid.");
+			return true;
+		} else {
+			console.log("checkip (", inputIP, ") returned: invalid.");
+			return false;
+		}
+	}
+
+	function configure() {
+
+		var inputStr       = $("#avrip").val();
+		var avrname        = $("#avrname").val();
+		var avrtype        = $("#avrtype").val();
+		var avrsuccesCheck = 0;
+
+		console.log( "inputStr = '",inputStr,"'");
+		var inputAr = inputStr.split(":");
+
+		var avrip = inputAr[0];
+
+		if ( typeof( inputAr[1]) !== "undefined" ) {
+			avrport = parseInt(inputAr[1]);
+            if ( isNaN(avrport) || avrport < 0 || avrport > 65536 ) {
+                Homey.alert( __('pair.config.invalidPort'), 'error');
+                console.log("Invalid port number.");
+                avrsuccesCheck = 1;
+            }
+		} else {
+			avrport = 23;
+		}
+
+		if ( avrtype === "" ) {
+			Homey.alert( __('pair.config.emptyType'), 'error');
+            console.log("No AVR type selected.");
+            avrsuccesCheck = 1;
+		}
+
+		if ( avrname === "" ) {
+			Homey.alert( __('pair.config.emptyName'), 'error');
+            console.log("No name given.");
+            avrsuccesCheck = 1;
+		}
+
+		if ( avrip === "" ) {
+			Homey.alert( __('pair.config.emptyIP'), 'error');
+            console.log("No ip address given.");
+            avrsuccesCheck = 1;
+		} else {
+			if ( ! validateIPV4( avrip ) ) {
+				Homey.alert( __('pair.config.invalidIP'), 'error');
+                console.log("IP address invalid.");
+                avrsuccesCheck = 1;
+			}
+		}
+
+		if ( avrsuccesCheck === 0 ) {
+
+			var data = {
+				avrip:    avrip,
+				avrport:  avrport,
+				avrname:  avrname,
+				avrtype:  avrtype
+			}
+
+			Homey.emit('get_devices', data );
+		} else {
+
+			Homey.alert( __('pair.config.required'), 'error');
+            Homey.done();
+		}
+	}
+</script>
+
+<style>
+div.avrdiv {
+    width: 100%;
+}
+
+div.avrdiv h1.avrh1 {
+    text-align: center;
+    font-size: 1.8em;
+}
+div.avrdiv p.avrrem {
+    font-size: .6em;
+}
+div.avrdiv fieldset.fsin {
+    background-color: lightgrey;
+    border: 1px solid black;
+}
+
+div.avrdiv p.avr label {
+    float: left;
+    width: 30%;
+    font: bold 0.9em Arial, Helvetica, sans-serif;
+}
+
+div.avrdiv p.avr input[type=text] {
+    color: #00008B;
+    background-color: #E3F2F7;
+    border: 1px inset #00008B;
+    width: 200px;
+}
+
+div.avrdiv p.avr select {
+    width: 200px;
+    background-color: #E3F2F7;
+    border: 1px inset #00008B;
+}
+
+div.avrdiv p.avr input[type=checkbox] {
+    width: 200px;
+    background-color: #E3F2F7;
+    border: 1px inset #00008B;
+}
+div.avrdiv input[type=button] {
+    color: red;
+    align: right;
+    border: 1px solid black;
+}
+</style>
+
+<div class="avrdiv">
+	<fieldset class="fsin">
+		<legend></legend>
+		<p class="avr">
+			<label for="avrip" data-i18n="pair.config.ipaddress">I : </label>
+			<input type="text" name="avrip" id="avrip" onchange="checkIP()" required="required" value="" />
+		</p>
+		<p class="avr">
+			<label for="avrname" data-i18n="pair.config.name">N : </label>
+			<input type="text" name="avrname" id="avrname" required="required" value="" />
+		</p>
+		<p class="avr">
+			<label for="avrtype" data-i18n="pair.config.type">P: </label>
+			<select name="avrtype" id="avrtype">
+                <option value=""></option>
+                <option value="AV8802">AV8802</option>
+                <option value="AV8801">AV8801</option>
+                <option value="AV7702">AV7702</option>
+                <option value="AV7701">AV7701</option>
+                <option value="AV7005">AV7005</option>
+                <option value="SR7010">SR7010</option>
+                <option value="SR7009">SR7009</option>
+                <option value="SR7008">SR7008</option>
+                <option value="SR7007">SR7007</option>
+                <option value="SR7005">SR7005</option>
+                <option value="SR6010">SR6010</option>
+                <option value="SR6009">SR6009</option>
+                <option value="SR6008">SR6008</option>
+                <option value="SR6007">SR6007</option>
+                <option value="SR6006">SR6006</option>
+                <option value="SR6005">SR6005</option>
+                <option value="SR5010">SR5010</option>
+                <option value="SR5009">SR5009</option>
+                <option value="SR5008">SR5008</option>
+                <option value="SR5007">SR5007</option>
+                <option value="SR5006">SR5006</option>
+                <option value="NR1606">NR1606</option>
+                <option value="NR1605">NR1605</option>
+                <option value="NR1604">NR1604</option>
+                <option value="NR1603">NR1603</option>
+                <option value="NR1602">NR1602</option>
+                <option value="NR1506">NR1506</option>
+                <option value="NR1504">NR1504</option>
+            </select>
+		</p>
+        <fieldset class="fsin">
+        <button class="button" data-i18n="pair.config.saveit"
+            onclick="configure();">S</button>
+	    </fieldset>
+	    <p class="avrrem" data-i18n="pair.config.message">Message</p>
+	</fieldset>
+
+</div>

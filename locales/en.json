@@ -1,0 +1,178 @@
+{
+    "pair": {
+        "config": {
+            "title":      "Marantz AVR configuration setup.",
+            "ipaddress":  "IP address :",
+            "type":       "AVR type :",
+            "name":       "Name of the avr",
+            "saveit":     "Save configuration",
+            "message":    "",
+            "emptyType":  "No AVR tyoe selected !.",
+            "emptyName":  "No name given !.",
+            "emptyIP":    "No IP address given !.",
+            "invalidIP":  "Invalid IPV4 IP address !.",
+            "invalidPort":  "Invalid Port number !.",
+            "required":   "Invalid parameters detected !."
+        }
+    },
+    "error": {
+        "cmdnf":          "Command not found in AVR config file.",
+        "dev_mis_del":    "Slot selected with no device attached on deletion.",
+        "full_dev_ar":    "No free slot for new device: device array overflow.",
+        "devnotavail":    "Device is curently not available. i.e not connected to AVR.",
+        "devnotused":     "Slot does not have a valid device.",
+        "invalidIP":      "Invalid IP address.",
+        "invalidPort":    "Invalid network port.",
+        "devnotsel":      "Select device before selecting input source.",
+        "devnotconf":     "Device has not loaded configuration"
+    },
+    "power": {
+        "on":             "Power on",
+        "off":            "Power off/standby"
+    },
+    "mzpower": {
+        "on":             "Main zone power on",
+        "off":            "Main zone power off/standby"
+    },
+    "mute": {
+        "on":             "Mute on",
+        "off":            "Mute off"
+    },
+    "inputsource": {
+        "phono":          "Gramaphone",
+        "cd":             "CD player",
+        "dvd":            "DVD player",
+        "bd":             "Bluray player",
+        "tv":             "TV",
+        "sat_cbl":        "Satelite/Cable",
+        "sat":            "Satelite",
+        "mplay":          "Media player",
+        "vcr":            "VCR player" ,
+        "game":           "Game console",
+        "v_aux":          "Video/aux",
+        "tuner":          "Tuner",
+        "spotify":        "Spotify",
+        "napster":        "Napster",
+        "flickr":         "Flickr",
+        "iradio":         "Internet radio",
+        "server":         "Server",
+        "favorites":      "favorites",
+        "cdr":            "CDR player",
+        "aux1":           "AUX1",
+        "aux2":           "AUX2",
+        "aux3":           "AUX3",
+        "aux4":           "AUX4",
+        "aux5":           "AUX5",
+        "aux6":           "AUX6",
+        "aux7":           "AUX7",
+        "net":            "Online music",
+        "net_usb":        "Net_USB",
+        "bt":             "Bluetooth",
+        "mxport":         "MXport",
+        "usb_ipod":       "Usb-IPOD",
+        "usb":            "USB",
+        "ipd":            "IPOD",
+        "irp":            "Internet Radion and recent play",
+        "fvp":            "Online music and play favorite",
+        "otp":            "One Touch Play"
+    },
+    "surround": {
+        "movie":          "Movie",
+        "music":          "Music",
+        "game":           "Game console",
+        "direct":         "Direct",
+        "pure":           "Direct pure",
+        "stereo":         "Stereo",
+        "auto":           "Auto",
+        "neural":         "Neural",
+        "standard":       "Standard",
+        "dolby":          "Dolby digital",
+        "dts":            "DTS",
+        "mchstereo":      "Multi chanel stereo",
+        "matrix":         "Matrix",
+        "virtual":        "Virtual",
+        "left":           "Left",
+        "right":          "Right"
+    },
+    "eco": {
+        "on":             "On",
+        "off":            "Off",
+        "auto":           "Auto",
+        "ns":             "Not supported"
+    },
+    "event": {
+        "power": {
+            "on":         "switched main power on",
+            "off":        "switched to standby"
+        },
+        "mzpower": {
+            "on":         "swiched main zone power on",
+            "off":        "swiched main zone power off"
+        },
+        "mute": {
+            "on":         "switched mute on",
+            "off":        "switched mute off"
+        },
+        "eco": {
+            "on":         "switched eco mode on",
+            "off":        "switched eco mode off",
+            "auto":       "switched to auto eco mode"
+        },
+        "inputsource": {
+            "phono":          "has gramaphone selected as input source",
+            "cd":             "has CD player selected as input source",
+            "dvd":            "has DVD player selected as input source",
+            "bd":             "has Bluray player selected as input source",
+            "tv":             "has TV selected as input source",
+            "sat_cbl":        "has satelite/cable selected as input source",
+            "sat":            "has satelite selected as input source",
+            "mplay":          "has media player selected as input source",
+            "vcr":            "has VCR player selected as input source" ,
+            "game":           "has game console selected as input source",
+            "v_aux":          "has video/aux selected as input source",
+            "tuner":          "has tuner selected as input source",
+            "spotify":        "has spotify selected as input source",
+            "napster":        "has napster selected as input source",
+            "flickr":         "has flickr selected as input source",
+            "iradio":         "has internet radio selected as input source",
+            "server":         "has server selected as input source",
+            "favorites":      "has favorites selected as input source",
+            "cdr":            "has CDR player selected as input source",
+            "aux1":           "has AUX1 selected as input source",
+            "aux2":           "has AUX2 selected as input source",
+            "aux3":           "has AUX3 selected as input source",
+            "aux4":           "has AUX4 selected as input source",
+            "aux5":           "has AUX5 selected as input source",
+            "aux6":           "has AUX6 selected as input source",
+            "aux7":           "has AUX7 selected as input source",
+            "net":            "has Online music selected as input source",
+            "net_usb":        "has net_USB selected as input source",
+            "bt":             "has bluetooth selected as input source",
+            "mxport":         "has MXport selected as input source",
+            "usb_ipod":       "has usb-IPOD selected as input source",
+            "usb":            "has USB selected as input source",
+            "ipd":            "has IPOD selected as input source",
+            "irp":            "has Internet Radion and recent play selected as input source",
+            "fvp":            "has Online music and play favorite selected as input source",
+            "otp":            "has One Touch Play selected as input source"
+        },
+            "surround": {
+            "movie":          "switched to surround mode movie",
+            "music":          "switched to surround mode music",
+            "game":           "switched to surround mode game console",
+            "direct":         "switched to surround mode surround direct",
+            "pure":           "switched to surround mode surround direct pure",
+            "stereo":         "switched to surround mode surround stereo",
+            "auto":           "switched to surround mode auto",
+            "neural":         "switched to surround mode neural",
+            "standard":       "switched to surround mode standard",
+            "dolby":          "switched to surround mode dolby digital",
+            "dts":            "switched to surround mode DTS",
+            "mchstereo":      "switched to surround mode multi chanel stereo",
+            "matrix":         "switched to surround mode matrix",
+            "virtual":        "switched to surround mode virtual",
+            "left":           "switched to surround mode left",
+            "right":          "switched to surround mode right"
+        }
+    }
+}

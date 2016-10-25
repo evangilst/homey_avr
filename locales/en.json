@@ -19,12 +19,14 @@
         "cmdnf":          "Command not found in AVR config file.",
         "dev_mis_del":    "Slot selected with no device attached on deletion.",
         "full_dev_ar":    "No free slot for new device: device array overflow.",
-        "devnotavail":    "Device is curently not available. i.e not connected to AVR.",
+        "devnotavail":    "Device is curently not available.",
+        "devnotcon":      "Device is not connected.",
         "devnotused":     "Slot does not have a valid device.",
         "invalidIP":      "Invalid IP address.",
         "invalidPort":    "Invalid network port.",
         "devnotsel":      "Select device before selecting input source.",
-        "devnotconf":     "Device has not loaded configuration"
+        "devnotconf":     "Device has not loaded configuration",
+        "econotsup":      "Device does not support ECO modes."
     },
     "power": {
         "on":             "Power on",

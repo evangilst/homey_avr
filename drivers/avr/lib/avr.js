@@ -1,1913 +1,1453 @@
 "use strict";
-
-var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
-var net = require("net");
-var fs = require("fs");
+/* ================================================================== */
+/* = Note:                                                          = */
+/* = This is a generated javascript file.                           = */
+/* = Don't edit the javascript file directly or change might be     = */
+/* = lost with the next build.                                      = */
+/* = Edit the typescipt file instead and re-generate the javascript = */
+/* = file.                                                          = */
+/* ================================================================== */
 var path = require("path");
-var eventEmitter = require("events");
-
-var TIME_TO_RETRY = 10000; // === 10 sec
-// Time to wait before re-open a new
-// connection to the AVR will take place.
-var WAIT_BETWEEN_TRANSMITS = 100; // === 100 msec
-// Wait time between two consecutive
-// command transmissions.
-// Marantz default is 50 msec or higher.
-
-/**
- * Class AVR
- */
-
-var Avr = (function () {
-
-    /**
-     * Create a new AVR Object.
-     */
-
-    function Avr() {
-        _classCallCheck(this, Avr);
-
-        this.avrPort = 0; // Network port to use
-        this.avrHost = ""; // IP address or hostname to use
-        this.avrName = ""; // Given name within Homry
-        this.avrType = ""; // Type of AVR to be used
-        this.avrNum = -1; // Internal index
-        this.conChn = null; // Event channel to communicate with the
-        // Homey part of the application (driver.js)
-        this.errMsg = "";
-        this.conf = null; // Will hold avr type configuration data
-        this.selAr = []; // Array with possible input source device
-        this.surroundAr = []; // Array with possible surround modes
-        this.ecoAr = []; // Array with possible eco modes
-        this.sendAr = []; // the sendbuffer
-        this.insertIndex = 0; // Send index of the sendbuffer.
-        this.deleteIndex = 0; // Delete index of the sendbuffer
-        this.MAXINDEX = 64; // Max commands in the sendbuffer
-        this.socket = null;
-        this.test = 0; // Test indicator,
-        // lifts some restrictions during testing.
-        this.consoleOut = 0; // 0 = no output
-        // 1 = debug
-
-        // Internal process state vars.
-        this.isLoopRunning = false;
+var fs = require("fs");
+var net = require("net");
+var events = require("events");
+/* ==================================================================== */
+/* TIME_TO_RETRY: (= 10 sec)                                            */
+/* Time to wait before a re-open a new connection to the AVR will       */
+/* take place after a connection has failed.                            */
+/* ==================================================================== */
+var TIME_TO_RETRY = 10000;
+/* ==================================================================== */
+/* WAIT_BETWEEN_TRANSMITS: (= 100 msec)                                 */
+/* Time to wait between two consecutive command transmission.           */
+/* Marantz; 70 msec or higher                                           */
+/* ==================================================================== */
+var WAIT_BETWEEN_TRANSMITS = 100;
+/* ==================================================================== */
+/* MAX_INDEX                                                            */
+/*    Maximum send buffer size                                          */
+/* ==================================================================== */
+var MAX_INDEX = 64;
+/* ==================================================================== */
+/* MAX_VOLUME                                                           */
+/*    Maximum volume level which can be set at once                     */
+/* ==================================================================== */
+var MAX_VOLUME = 80;
+var AVR = (function () {
+    function AVR() {
+        this.avr_port = 0;
+        this.avr_host = "";
+        this.avr_name = "";
+        this.avr_type = "";
+        this.conf = {};
+        this.insertIndex = 0;
+        this.deleteIndex = 0;
+        this.avr_avrnum = 0;
+        this.hasConfigLoaded = false;
         this.hasToStop = false;
-        this.hasConfigloaded = false;
         this.hasNetworkConnection = false;
-
-        // Initial parameter status of the AVR.
-        // Will be updated by _processData
-        this.powerStatus = "unknown";
-        this.mainZonePowerStatus = "unknown";
-        this.muteStatus = "unknown";
-        this.inputSourceSelection = "unknown";
-        this.volumeStatus = "unknown";
-        this.surroundMode = "unknown";
-        this.ecoStatus = "unknown";
-
-        // initialize send Array.
-        for (var I = 0; I <= this.MAXINDEX; I++) {
-            this.sendAr[I] = "";
+        this.isBufferLoopRunning = false;
+        this.consoleOut = false;
+        this.filter = true;
+        this.selAr = [];
+        this.surroundAr = [];
+        this.ecoAr = [];
+        this.sendBuffer = [];
+        this.powerStatus = "Unknown";
+        this.mainZonePowerStatus = "Unknown";
+        this.muteStatus = "Unknown";
+        this.inputSourceSelection = "Unknown";
+        this.volumeStatus = "Unknown";
+        this.surroundMode = "Unknown";
+        this.ecoStatus = "Unknown";
+        this.eventch = null;
+        this.comChannel = null;
+        /* ================================================================= */
+        /* Initialize the send buffer                                        */
+        /* ================================================================= */
+        for (var I = 0; I < MAX_INDEX; I++) {
+            this.sendBuffer[I] = "";
         }
-
-        // internal event channel.
-        this.server = new eventEmitter();
-        // setup the internal event listeners
-        this._eventloop();
+        /* ================================================================= */
+        /* Internal event handler                                            */
+        /* ================================================================= */
+        this.eventch = new events.EventEmitter();
+        /* ================================================================= */
+        /* Initaite the event listeners                                      */
+        /* ================================================================= */
+        this._eventLoop();
     }
-
     /**
-     * Initialize an AVR.
-     *
-     * @param      {number}  sPort   The network port to use.
-     * @param      {string}  sHost   The ip address of the AVR
-     * @param      {string}  sName   The name of the AVR
-     * @param      {string}  sType   The type of the AVR
-     * @param      {number}  sNum    The index into the AVR array (internal)
-     * @param      {socket}  sChannel The event socket
+     * Initialize a AVR.
+     * @param {number}              sPort    The network port to use.
+     * @param {string}              sHost    The hostname or IP address to be used.
+     * @param {string}              sName    The given 'Homey name' of the AVR.
+     * @param {string}              sType    The selectied Homey type of the AVR/
+     * @param {number}              sNum     An index into the AVR array (internal)
+     * @param {events.EventEmitter} sChannel Communication channel with the Homey part
      */
-
-    _createClass(Avr, [{
-        key: "init",
-        value: function init(sPort, sHost, sName, sType, sNum, sChannel) {
-            var _this = this;
-
-            this.avrPort = sPort;
-            this.avrHost = sHost;
-            this.avrName = sName;
-            this.avrType = sType;
-            this.avrNum = sNum;
-            this.conChn = sChannel;
-
-            //this._d(`Test: ${this.avrHost}:${this.avrPort} - ${this.avrName} `);
-
-            // Get the correct configuration of the AVR type.
-
-            this.avrConfigFile = path.join(__dirname, "/conf/" + this.avrType + ".json");
-            this._d(this.avrConfigFile);
-
-            fs.readFile(this.avrConfigFile, function (err, data) {
-
-                if (err) {
-                    _this.conf = null;
-                    _this.hasConfigloaded = false;
-                    _this.conChn.emit("init_failed", _this.avrNum, _this.avrType, err);
-                    return;
-                }
-
-                try {
-                    _this.conf = JSON.parse(data);
-                } catch (err) {
-
-                    _this.conf = null;
-                    _this.hasConfigloaded = false;
-                    _this.conChn.emit("init_failed", _this.avrNum, _this.avrType, err);
-                    return;
-                }
-
-                _this.hasConfigloaded = true;
-
-                // Fill the input selection array with the entries supported by the AVR type
-                _this._fillSelectionArray();
-                // Fill the surround selection array with the entries supported by the AVR type.
-                _this._fillSurroundArray();
-                // File the eco selection array with entries supported by the AVR.
-                _this._fillEcoArray();
-
-                _this.conChn.emit("init_success", _this.avrNum, _this.avrName, _this.avrType);
-                _this.server.emit("config_loaded");
-            });
-        }
-
-        /*********************************************************************
-         * Private methods
-         *********************************************************************/
-
-        /**
-         * EventLoop handles the avr control events
-         * @private
-         */
-
-    }, {
-        key: "_eventloop",
-        value: function _eventloop() {
-            var _this2 = this;
-
-            this.server
-            // 'config_loaded' event is send by 'init' after succesfull
-            // loading and parsing the AVR config file.
-            // next action: open network connection.
-            .on("config_loaded", function () {
-                _this2.configLoaded = true;
-                _this2._openConnection();
-            })
-
-            // Network events all emitted by '_openConnection' depending
-            // (except 'net_retry') on the received network events.
-            // 'net_connect'    -> new connection established
-            // 'net_disconnect' -> Disconnection request from the AVR
-            // 'net_error'      -> Received net work errors.
-            // 'net_timedout'   -> Network connection to the AVR has a timeout.
-            // 'net_retry'      -> Try to connect again to the AVR.
-            .on("net_connect", function () {
-                // notify 'homey' part there is a connection
-                // i.e make dev available
-
-                _this2._getAVRStatusUpdate(); // get the status of the new AVR
-
-                // Wait 2 sec before informing homey so the status of the AVR
-                // can be collected.
-                // Set hasNetworkConnection after the the wait time so the
-                // above initial status requests don't cause events
-                setTimeout(function () {
-                    _this2.hasNetworkConnection = true;
-                    _this2.conChn.emit("net_connected", _this2.avrNum, _this2.avrName);
-                }, 2000);
-            }).on("net_disconnect", function () {
-                // notify 'homey' part connection is disconnected
-                // i.e make dev unavailable
-                _this2.conChn.emit("net_disconnected", _this2.avrNum, _this2.avrName);
-                _this2.server.emit("net_retry"); // connect again.
-            }).on("net_error", function (err) {
-                // notify 'homey' part connection is disconnected
-                // i.e make dev unavailable
-                _this2.conChn.emit("net_error", _this2.avrNum, _this2.avrName, err);
-                _this2.server.emit("net_retry"); // connect again.
-            }).on("net_timed_out", function () {
-                // notify 'homey' part connection is disconnected
-                // i.e make dev unavailable
-                _this2.conChn.emit("net_timed_out", _this2.avrNum, _this2.avrName);
-                _this2.server.emit("net_retry"); // connect again.
-            }).on("net_retry", function () {
-                // Don't start the action if a request to stop is received.
-                // hasToStop will be set by 'disconnect' function.
-                if (_this2.hasToStop === false) {
-                    setTimeout(function () {
-                        _this2._openConnection();
-                    }, TIME_TO_RETRY);
-                }
-            })
-            // Disconnect request from user/Homey
-            .on("req_disconnect", function () {
-                _this2.hasToStop = true;
-                _this2.socket.end();
-            })
-
-            // send buffer events.
-            // 'send_command' event occurs when
-            //    1) the send buffer is filled with a new command (_insertIntoSendBuffer)
-            //    2) After a command is send to the AVR.
-            //       To check if the buffer is no empty. (_insertIntoSendBufferToAvr).
-
-            .on("new_data", function () {
-                // New commands are added to the send buffer.
-                // start the send loop only once
-                // will be reset as soon the send buffer runs out of new data.
-                if (_this2.isLoopRunning === false) {
-                    _this2.isLoopRunning = true;
-                    _this2._checkSendBuffer(); // Send command to AVR.
-                }
-            }).on("check_buffer", function () {
-                _this2._checkSendBuffer();
-            })
-
-            // catch uncaught exception to prevent runtime problems.
-            .on("uncaughtException", function (err) {
-                _this2.conChn.emit("net_uncaught", _this2.avrNum, _this2.avrName, err);
-            });
-        }
-
-        /**
-         * Connects to the AVR and sets listeners on the possible connection events.
-         *
-         *  @private
-         */
-    }, {
-        key: "_openConnection",
-        value: function _openConnection() {
-            var _this3 = this;
-
-            this._d("Opening AVR network connection to " + this.avrHost + ":" + this.avrPort + ".");
-
-            // Use allowHalfOpen to create a permanent connection to the AVR
-            // over the network otherwise the connection will terminate asa soon
-            // as the socket send buffer is empty.
-            this.socket = new net.Socket({
-                allowHalfOpen: true
-            });
-
-            this.socket.connect(this.avrPort, this.avrHost).on("connect", function () {
-                _this3.server.emit("net_connect");
-            }).on("error", function (err) {
-                _this3.hasNetworkConnection = false;
-                _this3.socket.end();
-                _this3.socket = null;
-                _this3.server.emit("net_error", err);
-            }).on("data", function (data) {
-                _this3._processData(data);
-            }).on("end", function () {
-                _this3.hasNetworkConnection = false;
-                _this3.socket.end();
-                _this3.socket = null;
-                _this3.server.emit("net_disconnect");
-            }).on("timeout", function () {
-                _this3.hasNetworkConnection = false;
-                _this3.socket.end();
-                _this3.socket = null;
-                _this3.server.emit("net_timed_out");
-            }).on("uncaughtException", function (err) {
-                _this3.hasNetworkConnection = false;
-                _this3.socket.end();
-                _this3.socket = null;
-                _this3.server.emit("net_error", new Error("uncaught exception - " + err + "."));
-            });
-        }
-
-        /**
-         * Sends a command to the avr.
-         * It will automatically add a 'CR' to the command.
-         * The AVR requires approx 50-60 msec between to consecutive commands.
-         * The wait time between two commands is set by WAIT_BETWEEN_TRANSMITS (100msec)
-         *
-         * @param      {string}  cmd     The command to be send to the AVR
-         * @private
-         */
-    }, {
-        key: "_sendToAvr",
-        value: function _sendToAvr(cmd) {
-            var _this4 = this;
-
-            this._d("Sending : " + cmd + ".");
-            this.socket.write(cmd + "\r");
-
-            setTimeout(function () {
-                _this4.server.emit("check_buffer");
-            }, WAIT_BETWEEN_TRANSMITS);
-        }
-
-        /**
-         * Check the send buffer if there is something to be send.
-         * if not:
-         *     set isLoopRunning to false and wait on new data to be send
-         *     by _insertIntoSendBuffer routine.
-         *  if so:
-         *      Update the deleteIndex and send data to the AVR.
-         *
-         * @private
-         */
-    }, {
-        key: "_checkSendBuffer",
-        value: function _checkSendBuffer() {
-
-            this._d(this.insertIndex + " / " + this.deleteIndex + ".");
-
-            if (this.insertIndex === this.deleteIndex) {
-
-                // end buffer is 'empty' => nothing to do then wait till's flled again.
-                this.isLoopRunning = false;
-                this._d("Send loop temp stopped - empty send buffer.");
-            } else {
-                if (this.sendAr[this.deleteIndex] === "") {
-
-                    // If the command to be send if empty consider it as
-                    // empty buffer and exit the data send loop.
-                    this.isLoopRunning = false;
-                    this._d("Sendbuffer entry empty (stopping send loop)!.");
-                } else {
-                    var data = this.sendAr[this.deleteIndex];
-                    this.sendAr[this.deleteIndex] = ""; // clear used buffer.
-                    this.deleteIndex++;
-
-                    if (this.deleteIndex >= this.MAXINDEX) {
-                        this.deleteIndex = 0;
-                    }
-                    this._d("Setting deleteIndex to " + this.deleteIndex + ".");
-
-                    this._sendToAvr(data);
+    AVR.prototype.init = function (sPort, sHost, sName, sType, sNum, sChannel) {
+        var _this = this;
+        this.avr_port = sPort;
+        this.avr_host = sHost;
+        this.avr_name = sName;
+        this.avr_type = sType;
+        this.avr_avrnum = sNum;
+        this.comChannel = sChannel;
+        var avRConfigFile = path.join(__dirname, "/conf/" + this.avr_type + ".json");
+        fs.readFile(avRConfigFile, "utf8", function (err, data) {
+            if (err) {
+                _this.conf = null;
+                _this.hasConfigLoaded = false;
+                _this.comChannel.emit("init_failed", _this.avr_avrnum, _this.avr_type, err);
+            }
+            ;
+            try {
+                _this.conf = JSON.parse(data);
+            }
+            catch (err) {
+                _this.conf = null;
+                _this.hasConfigLoaded = false;
+                _this.comChannel.emit("init_failed", _this.avr_avrnum, _this.avr_type, err);
+            }
+            _this.hasConfigLoaded = true;
+            // Fill the input selection array with the entries supported by the AVR type
+            _this._fillSelectionInfo();
+            // Fill the surround selection array with the entries supported by the AVR type.
+            _this._fillSurroundArray();
+            // File the eco selection array with entries supported by the AVR.
+            _this._fillEcoArray();
+            _this.comChannel.emit("init_success", _this.avr_avrnum, _this.avr_name, _this.avr_type);
+            _this.eventch.emit("config_loaded");
+        });
+    };
+    /**
+     * Creates an array with the supported input source selection for the selected AVR type.
+     * @private
+     */
+    AVR.prototype._fillSelectionInfo = function () {
+        for (var I = 0; I < this.conf.inputsource.length; I++) {
+            if (typeof (this.conf.inputsource[I] !== "undefined" &&
+                this.conf.inputsource[I] !== null)) {
+                if (this.conf.inputsource[I].valid === true &&
+                    this.conf.inputsource[I].prog_id !== "i_request") {
+                    var item = {
+                        i18n: this.conf.inputsource[I].i18n,
+                        command: this.conf.inputsource[I].command
+                    };
+                    this.selAr.push(item);
                 }
             }
         }
-
-        /**
-         * Inserts command data into the send buffer.
-         * Updates the insertIndex and start the send data event loop.
-         * If send buffer overrun occurs:
-         *    1) drop the new commands
-         *    2) notify Homey it occurred.
-         *
-         * @param      {string}  data    The command data.
-         * @private
-         */
-    }, {
-        key: "_insertIntoSendBuffer",
-        value: function _insertIntoSendBuffer(data) {
-
-            var nextInsertIndex = this.insertIndex + 1;
-
-            if (nextInsertIndex >= this.MAXINDEX) {
-                nextInsertIndex = 0;
-            }
-
-            if (this.nextInsertIndex === this.deleteIndex) {
-                // data buffer overrun !
-                this.conChn.emit("error_log", this.avrNum, this.avrName, new Error("send buffer overload !."));
-            } else {
-
-                this.sendAr[this.insertIndex] = data;
-
-                this.insertIndex++;
-
-                if (this.insertIndex >= this.MAXINDEX) {
-                    this.insertIndex = 0;
-                }
-
-                this._d("Next insert index = " + this.insertIndex);
-
-                // Signal there is new data in the send buffer.
-
-                this.server.emit("new_data");
-            }
-        }
-
-        /**
-         * Creates an array with the supported inputsource selections for this AVR type.
-         *
-         *  @private
-         */
-    }, {
-        key: "_fillSelectionArray",
-        value: function _fillSelectionArray() {
-
-            for (var I = 0; I < this.conf.inputsource.length; I++) {
-
-                if (typeof this.conf.inputsource[I] !== "undefined" && this.conf.inputsource[I] !== null) {
-
-                    if (this.conf.inputsource[I].valid === true && this.conf.inputsource[I].prog_id !== "i_request") {
-
-                        var item = {};
-
-                        item.i18n = this.conf.inputsource[I].i18n;
-                        item.command = this.conf.inputsource[I].command;
-
-                        this.selAr.push(item);
-                    }
+    };
+    /**
+     * Creates an array with the surround selection of the selected AVT type.
+     * @private
+     */
+    AVR.prototype._fillSurroundArray = function () {
+        for (var I = 0; I < this.conf.surround.length; I++) {
+            if (typeof (this.conf.surround[I] !== "undefined" &&
+                this.conf.surround[I] !== null)) {
+                if (this.conf.surround[I].valid === true &&
+                    this.conf.surround[I].prog_id !== "s_request") {
+                    var item = {
+                        i18n: this.conf.surround[I].i18n,
+                        command: this.conf.surround[I].command
+                    };
+                    this.surroundAr.push(item);
                 }
             }
         }
-
-        /**
-         * Creates an array with supported surround selections for this AVR type .
-         *
-         *  @private
-         */
-    }, {
-        key: "_fillSurroundArray",
-        value: function _fillSurroundArray() {
-
-            for (var I = 0; I < this.conf.surround.length; I++) {
-
-                if (typeof this.conf.surround[I] !== "undefined" && this.conf.surround[I] !== null) {
-
-                    if (this.conf.surround[I].valid === true && this.conf.surround[I].prog_id !== "s_request") {
-
-                        var item = {};
-
-                        item.i18n = this.conf.surround[I].i18n;
-                        item.command = this.conf.surround[I].command;
-
-                        this.surroundAr.push(item);
-                    }
-                }
-            }
-        }
-
-        /**
-         * Creates an array with the supported eco commands for this AVR type.
-         * or
-         * an array with 'not supported'.
-         *
-         *  @private
-         */
-    }, {
-        key: "_fillEcoArray",
-        value: function _fillEcoArray() {
+    };
+    /**
+     * Creates an array with the eco command selection for the selected AVR type.
+     * @private
+     */
+    AVR.prototype._fillEcoArray = function () {
+        if (this.hasEco() === true) {
             for (var I = 0; I < this.conf.eco.length; I++) {
-
-                if (typeof this.conf.eco[I] !== "undefined" && this.conf.eco[I] !== null) {
-
-                    if (this.conf.eco[I].valid === true && this.conf.eco[I].prog_id !== "eco_request") {
-
-                        var item = {};
-
-                        item.i18n = this.conf.eco[I].i18n;
-                        item.command = this.conf.eco[I].command;
-
+                if (typeof (this.conf.eco[I] !== "undefined" &&
+                    this.conf.eco[I] !== null)) {
+                    if (this.conf.eco[I].valid === true &&
+                        this.conf.eco[I].prog_id !== "eco_request") {
+                        var item = {
+                            i18n: this.conf.eco[I].i18n,
+                            command: this.conf.eco[I].command
+                        };
                         this.ecoAr.push(item);
                     }
                 }
             }
-
-            if (this.ecoAr.length === 0) {
-                // Eco not supported for this type of AVR.
-
-                var item = {};
-                item.i18n = "eco.ns";
-                item.command = "ECO_UN_SUPPORTED";
-
-                this.ecoAr.push(item);
+        }
+        else {
+            this.ecoAr.push({ i18n: "error.econotsup", command: "eco_not_supported" });
+        }
+    };
+    /**
+     * EventLoop handles the avr driver control events.
+     * @private
+     */
+    AVR.prototype._eventLoop = function () {
+        var _this = this;
+        this.eventch
+            .on("config_loaded", function () {
+            _this._d("Configuration loaded. Open a network connection...");
+            _this._openConnection();
+        })
+            .on("net_connected", function () {
+            _this._d("Connected with AVR.");
+            _this._getAVRstatusUpdate(); // get the status of the AVR
+            /* ============================================================ */
+            /* Wait 2 sec before informing homey to the status of the AVR   */
+            /* can be collected without interference.                       */
+            /* Set hasNetworkConnection after the wait time and             */
+            /* 'free' the device from Homey.                                */
+            /* ============================================================ */
+            setTimeout(function () {
+                _this._d("Informing Homey AVR is available.");
+                _this.hasNetworkConnection = true;
+                _this.comChannel.emit("net_connected", _this.avr_avrnum, _this.avr_name);
+            }, 2000);
+        })
+            .on("net_disconnected", function () {
+            /* ============================================================ */
+            /* - Notify Homey the network connection is lost.               */
+            /* - Try to reconnect again.                                    */
+            /* ============================================================ */
+            _this._d("Network disconnected....");
+            _this.comChannel.emit("net_disconnected", _this.avr_avrnum, _this.avr_name);
+            _this.eventch.emit("net_retry");
+        })
+            .on("net_error", function (err) {
+            /* ============================================================ */
+            /* - Notify Homey the network connection is disconneted.        */
+            /* - Try to reconnect again.                                    */
+            /* ============================================================ */
+            _this._d("Network error " + err);
+            _this.comChannel.emit("net_error", _this.avr_avrnum, _this.avr_name, err);
+            _this.eventch.emit("net_retry");
+        })
+            .on("net_timedout", function () {
+            /* ============================================================ */
+            /* - Notify Homey the network connection is disconneted.        */
+            /* - Try to reconnect again.                                    */
+            /* ============================================================ */
+            _this._d("Network timed out.");
+            _this.comChannel.emit("net_timed_out", _this.avr_avrnum, _this.avr_name);
+            _this.eventch.emit("net_retry");
+        })
+            .on("net_retry", function () {
+            _this._d("Network retry.");
+            setTimeout(function () {
+                if (_this.hasToStop === false) {
+                    _this._openConnection();
+                }
+            }, TIME_TO_RETRY);
+        })
+            .on("req_disconnect", function () {
+            _this._d("Request disconnect.");
+            _this.hasToStop = true;
+            if (_this.avrSocket !== null) {
+                _this.avrSocket.end();
+            }
+        })
+            .on("new_data", function () {
+            if (_this.isBufferLoopRunning === false) {
+                _this.isBufferLoopRunning = true;
+                _this._checkSendBuffer();
+            }
+        })
+            .on("check_buffer", function () {
+            _this._checkSendBuffer();
+        })
+            .on("uncaughtException", function (err) {
+            _this.comChannel.emit("net_uncaught", _this.avr_avrnum, _this.avr_name);
+            _this.avrSocket.end();
+            _this.eventch.emit("net_retry");
+        });
+    };
+    /**
+     * Connects to the AVR ans sets listeners on the possible connection events.
+     * @private
+     */
+    AVR.prototype._openConnection = function () {
+        var _this = this;
+        this._d("Opening AVR network connection to '" + this.avr_host + ":" + this.avr_port + "'.");
+        /* ================================================================ */
+        /* - Use allowHalfOpen to create a permanent connection to the AVR  */
+        /* - over the network otherwise the connection will terminate as    */
+        /* - soon as the socket buffer is empty.                            */
+        /* ================================================================ */
+        this.avrSocket = new net.Socket({
+            allowHalfOpen: true
+        });
+        this.avrSocket.connect(this.avr_port, this.avr_host);
+        this.avrSocket
+            .on("connect", function () {
+            _this._d("Connected");
+            _this.eventch.emit("net_connected");
+        })
+            .on("error", function (err) {
+            _this._d("Network error");
+            _this.hasNetworkConnection = false;
+            _this.avrSocket.end();
+            _this.avrSocket = null;
+            _this.eventch.emit("net_error", err);
+        })
+            .on("data", function (data) {
+            _this._d("data");
+            _this._processData(data);
+        })
+            .on("end", function () {
+            _this._d("Disconnected");
+            _this.hasNetworkConnection = false;
+            _this.avrSocket.end();
+            _this.avrSocket = null;
+            _this.eventch.emit("net_disconnected");
+        })
+            .on("timeout", function () {
+            _this._d("timed out.");
+            _this.hasNetworkConnection = false;
+            _this.avrSocket.end();
+            _this.avrSocket = null;
+            _this.eventch.emit("net_timed_out");
+        })
+            .on("uncaughtException", function (err) {
+            _this._d("UncaughtException " + err);
+            _this.hasNetworkConnection = false;
+            _this.avrSocket.end();
+            _this.avrSocket = null;
+            _this.eventch.emit("net_error", new Error("uncaught exception - " + err + "."));
+        });
+    };
+    AVR.prototype._checkSendBuffer = function () {
+        this._d("_checkSendBuffer: " + this.insertIndex + " / " + this.deleteIndex);
+        if (this.insertIndex === this.deleteIndex) {
+            /* ============================================================= */
+            /* - Send buffer is empty => nothing to do till new data is      */
+            /* - entered into the send buffer.                               */
+            /* ============================================================= */
+            this.isBufferLoopRunning = false;
+            this._d("Send buffer loop stopped - send buffer empty.");
+        }
+        else {
+            if (this.sendBuffer[this.deleteIndex] === "") {
+                /* =========================================================== */
+                /* - If the command to be send is empty, consider it as        */
+                /* - buffer empty and exit the buffer loop.                    */
+                /* =========================================================== */
+                this.isBufferLoopRunning = false;
+                this._d("Send buffer loop stopped - command empty.");
+            }
+            else {
+                var data = this.sendBuffer[this.deleteIndex];
+                this.sendBuffer[this.deleteIndex] = "";
+                this.deleteIndex++;
+                if (this.deleteIndex >= MAX_INDEX) {
+                    this.deleteIndex = 0;
+                }
+                this._d("Setting deleteIndex to " + this.deleteIndex + ".");
+                this._sendToAvr(data);
             }
         }
-
-        /**
-         * Process the received data from the AVR.
-         * Is called when a 'data' network events is received.
-         * Note:
-         *     there is a 2 sec delay between the actual connection establishment
-         *     and the internal connection flag update.
-         *     This to allow the initial status requests to update the internal
-         *     statuses without generating events to Homey.
-         *
-         * @private
-         * @param      {buffer}  data    The data received from the AVR.
-         */
-    }, {
-        key: "_processData",
-        value: function _processData(data) {
-            var xData = String(data).replace("\r", "");
-
-            this._d("Received : " + xData + ".");
-
-            var newStatus = "";
-            var oldStatus = "";
-            var newI18n = "";
-            var oldI18n = "";
-
-            switch (xData.substr(0, 2)) {
-
-                case "PW":
-                    // main power
-                    newStatus = xData;
-                    oldStatus = this.powerStatus;
-                    newI18n = "";
-                    oldI18n = "";
-
-                    this.powerStatus = newStatus;
-
-                    if (this.hasNetworkConnection == true) {
-                        for (var I = 0; I < this.conf.power.length; I++) {
-                            if (newStatus === this.conf.power[I].command) {
-                                newI18n = this.conf.power[I].i18n;
-                            }
+    };
+    /**
+     * Sends to command to the AVR.
+     * It will add a '\r' as required by Marantz.
+     * The AVR requires approx 50-70 msec between consecutive commands.
+     *
+     * @param {string} cmd The command string
+     * @private
+     */
+    AVR.prototype._sendToAvr = function (cmd) {
+        var _this = this;
+        this._d("Sending: " + cmd + ".");
+        this.avrSocket.write(cmd + "\r");
+        setTimeout(function () {
+            _this.eventch.emit("check_buffer");
+        }, WAIT_BETWEEN_TRANSMITS);
+    };
+    /**
+     * Insert a command into the send buffer.
+     * Updates the insertIndex and start a send buffer loop,
+     * @param  {string} cmd  the command string
+     * @private
+     */
+    AVR.prototype._insertIntoSendBuffer = function (cmd) {
+        var nextInsertIndex = this.insertIndex + 1;
+        if (nextInsertIndex >= MAX_INDEX) {
+            nextInsertIndex = 0;
+        }
+        if (nextInsertIndex === this.deleteIndex) {
+            /* ============================================================== */
+            /* - Data buffer overrun !.                                       */
+            /* - Notify Homey part but dont insert                            */
+            /* ============================================================== */
+            this.comChannel.emit("error_log", this.avr_avrnum, this.avr_name, new Error("Send buffer overrun !."));
+        }
+        else {
+            this.sendBuffer[this.insertIndex] = cmd;
+            this.insertIndex = nextInsertIndex;
+            this._d("InsertIndex set to " + this.insertIndex + ".");
+            this.eventch.emit("new_data");
+        }
+    };
+    AVR.prototype._processData = function (data) {
+        var xData = data.toString("utf8").replace("\r", "");
+        this._d("Received : '" + xData + "'.");
+        var newStatus = "";
+        var oldStatus = "";
+        var newi18n = "";
+        var oldi18n = "";
+        /* ============================================================== */
+        /* - Note:                                                        */
+        /* -  Report changes to the Homey part only if there is a         */
+        /* -  network connection with the AVR.                            */
+        /* ============================================================== */
+        switch (xData.substr(0, 2)) {
+            case "PW":
+                /* ========================================================== */
+                /* - Main Power                                               */
+                /* ========================================================== */
+                newStatus = xData;
+                oldStatus = this.powerStatus;
+                newi18n = "";
+                oldi18n = "";
+                this.powerStatus = newStatus;
+                if (this.hasNetworkConnection === true &&
+                    newStatus !== oldStatus) {
+                    for (var I = 0; I < this.conf.power.length; I++) {
+                        if (newStatus === this.conf.power[I].command) {
+                            newi18n = this.conf.power[I].i18n;
                         }
-
-                        for (var I = 0; I < this.conf.power.length; I++) {
-                            if (oldStatus === this.conf.power[I].command) {
-                                oldI18n = this.conf.power[I].i18n;
-                            }
-                        }
-
-                        this.conChn.emit("power_status_chg", this.avrNum, this.avrName, newI18n, oldI18n);
                     }
-
-                    break;
-                case "ZM":
-                    // main zone power
-                    this.mainZonePowerStatus = xData;
-                    if (this.hasNetworkConnection === true) {
-                        for (var I = 0; I < this.conf.main_zone_power.length; I++) {
-                            if (xData === this.conf.main_zone_power[I].command) {
-                                this.conChn.emit("power_status_chg", this.avrNum, this.avrName, this.conf.main_zone_power[I].i18n);
-                            }
+                    for (var I = 0; I < this.conf.power.length; I++) {
+                        if (oldStatus === this.conf.power[I].command) {
+                            oldi18n = this.conf.power[I].i18n;
                         }
                     }
-                    break;
-                case "SI":
-                    // inputselection
-                    this.inputSourceSelection = xData;
-                    if (this.hasNetworkConnection === true) {
-                        for (var I = 0; I < this.conf.inputsource.length; I++) {
-                            if (xData === this.conf.inputsource[I].command) {
-                                this.conChn.emit("isource_status_chg", this.avrNum, this.avrName, this.conf.inputsource[I].i18n);
-                            }
+                    this.comChannel.emit("power_status_chg", this.avr_avrnum, this.avr_name, newi18n, oldi18n);
+                }
+                break;
+            case "ZM":
+                /* ========================================================== */
+                /* - Main Zone Power                                          */
+                /* ========================================================== */
+                newStatus = xData;
+                oldStatus = this.mainZonePowerStatus;
+                newi18n = "";
+                oldi18n = "";
+                this.mainZonePowerStatus = xData;
+                if (this.hasNetworkConnection === true &&
+                    newStatus !== oldStatus) {
+                    for (var I = 0; I < this.conf.main_zone_power.length; I++) {
+                        if (newStatus === this.conf.main_zone_power[I].command) {
+                            newi18n = this.conf.main_zone_power[I].i18n;
                         }
                     }
-                    break;
-                case "MU":
-                    // mute
-                    newStatus = xData;
-                    oldStatus = this.muteStatus;
-                    newI18n = "";
-                    oldI18n = "";
-
-                    this.muteStatus = newStatus;
-
-                    if (this.hasNetworkConnection == true) {
-                        for (var I = 0; I < this.conf.mute.length; I++) {
-                            if (newStatus === this.conf.mute[I].command) {
-                                newI18n = this.conf.mute[I].i18n;
-                            }
-                        }
-
-                        for (var I = 0; I < this.conf.mute.length; I++) {
-                            if (oldStatus === this.conf.mute[I].command) {
-                                oldI18n = this.conf.mute[I].i18n;
-                            }
-                        }
-
-                        this.conChn.emit("mute_status_chg", this.avrNum, this.avrName, newI18n, oldI18n);
-                    }
-
-                    break;
-                case "MS":
-                    // Surround mode
-                    this.surroundMode = xData;
-                    if (this.hasNetworkConnection === true) {
-                        for (var I = 0; I < this.conf.surround.length; I++) {
-                            if (xData === this.conf.surround[I].command) {
-                                this.conChn.emit("mute_status_chg", this.avrNum, this.avrName, this.conf.surround[I].i18n);
-                            }
+                    for (var I = 0; I < this.conf.main_zone_power.length; I++) {
+                        if (oldStatus === this.conf.main_zone_power[I].command) {
+                            oldi18n = this.conf.main_zone_power[I].i18n;
                         }
                     }
-
-                    break;
-                case "MV":
-                    this._processVolumeData(xData);
-                    break;
-                case "EC":
-                    //Eco setting.
-                    newStatus = xData;
-                    oldStatus = this.ecoStatus;
-                    newI18n = "";
-                    oldI18n = "";
-
-                    this.ecoStatus = newStatus;
-
-                    if (this.hasNetworkConnection == true) {
-                        for (var I = 0; I < this.conf.eco.length; I++) {
-                            if (newStatus === this.conf.eco[I].command) {
-                                newI18n = this.conf.eco[I].i18n;
-                            }
+                    this.comChannel.emit("mzpower_status_chg", this.avr_avrnum, this.avr_name, newi18n, oldi18n);
+                }
+                break;
+            case "SI":
+                /* ========================================================== */
+                /* - Input Source selection                                   */
+                /* ========================================================== */
+                newStatus = xData;
+                oldStatus = this.inputSourceSelection;
+                newi18n = "";
+                oldi18n = "";
+                this.inputSourceSelection = xData;
+                if (this.hasNetworkConnection === true &&
+                    newStatus !== oldStatus) {
+                    for (var I = 0; I < this.conf.inputsource.length; I++) {
+                        if (newStatus === this.conf.inputsource[I].command) {
+                            newi18n = this.conf.inputsource[I].i18n;
                         }
-
-                        for (var I = 0; I < this.conf.eco.length; I++) {
-                            if (oldStatus === this.conf.eco[I].command) {
-                                oldI18n = this.conf.eco[I].i18n;
-                            }
+                    }
+                    for (var I = 0; I < this.conf.inputsource.length; I++) {
+                        if (oldStatus === this.conf.inputsource[I].command) {
+                            oldi18n = this.conf.inputsource[I].i18n;
                         }
-
-                        this.conChn.emit("eco_status_chg", this.avrNum, this.avrName, newI18n, oldI18n);
                     }
-
-                    break;
-            }
-        }
-    }, {
-        key: "_processVolumeData",
-        value: function _processVolumeData(xData) {
-
-            this._d("_processVolumeData received '" + xData + "'.");
-
-            if (xData.match(/^MVMAX .*/) === null) {
-                this._d("Setting volume status to '" + xData + "'.");
-                this.volumeStatus = xData;
-
-                var re = /^MV(\d+)/i;
-
-                var Ar = xData.match(re);
-
-                if (Ar !== null) {
-                    this.conChn.emit("volume_chg", this.avrNum, this.avrName, Ar[1]);
+                    this.comChannel.emit("isource_status_chg", this.avr_avrnum, this.avr_name, newi18n, oldi18n);
                 }
-            }
-        }
-
-        /**
-         * Called once after the AVR is created/started to get the current status of:
-         *     1) power
-         *     2) main zone power
-         *     3) mute
-         *     4) input selection
-         *     5) volume
-         *     6) surround
-         *     7) eco
-         *
-         * @private
-         */
-    }, {
-        key: "_getAVRStatusUpdate",
-        value: function _getAVRStatusUpdate() {
-            this._getAVRPowerStatus();
-            this._getAVRMainZonePowerStatus();
-            this._getAVRMuteStatus();
-            this._getAVRInputSelection();
-            this._getAVRVolumeStatus();
-            this._getAVRSurroundMode();
-            this._getAVREcoStatus();
-        }
-
-        /*********************************************************************
-         * Debug methods not be to be used in prod env.
-         *********************************************************************/
-
-        /**
-         * Enables the debug message to console.log (debuggging only).
-         */
-    }, {
-        key: "setConsoleToDebug",
-        value: function setConsoleToDebug() {
-            this.consoleOut = 1;
-            this._d("Avr debug on");
-        }
-
-        /**
-         * Disables the info/debug message to console.log (debuggging only).
-         */
-    }, {
-        key: "setConsoleOff",
-        value: function setConsoleOff() {
-            this._d("Avr debug off");
-            this.consoleOut = 0;
-        }
-
-        /**
-         * Overrides the AVR type filtering of some commands (testing only).
-         */
-    }, {
-        key: "setTest",
-        value: function setTest() {
-            this.test = 1;
-        }
-
-        /**
-         * Clear the override of AVR type filtering of seom commands (testing only).
-         */
-    }, {
-        key: "clearTest",
-        value: function clearTest() {
-            this.test = 0;
-        }
-
-        /**
-         * Send conditionally debug message to console.log (debuggging only).
-         *
-         * @private
-         * @param      {string}  str     The message to console.log
-         */
-    }, {
-        key: "_d",
-        value: function _d(str) {
-            if (this.consoleOut > 0) {
-                this.conChn.emit("debug_log", this.avrNum, this.avrName, str);
-
-                // let date = new Date();
-                // let dateStr = date.toISOString();
-                //console.log(`${dateStr}-${str}.`);
-            }
-        }
-
-        /*********************************************************************
-         * get AVR initial parameters methods
-         *********************************************************************/
-        /**
-         * Returns the ipaddress of the AVR.
-         *
-         * @return     {string}  The hostname / IP address
-         */
-    }, {
-        key: "getHostname",
-        value: function getHostname() {
-            return this.avrHost;
-        }
-
-        /**
-         * Returns the network port of the AVR
-         *
-         * @return     {number}  The port.
-         */
-    }, {
-        key: "getPort",
-        value: function getPort() {
-            return this.avrPort;
-        }
-
-        /**
-         * Returns the type of the AVR.
-         *
-         * @return     {string}  The type of the AVR.
-         */
-    }, {
-        key: "getType",
-        value: function getType() {
-            return this.avrType;
-        }
-
-        /**
-         * Returns the given name of the AVR as shown in 'Homey'.
-         *
-         * @return     {string}  The name.
-         */
-    }, {
-        key: "getName",
-        value: function getName() {
-            return this.avrName;
-        }
-
-        /**
-         * Determines if configuration loaded.
-         *
-         * @return     {boolean}  True if configuration loaded, False otherwise.
-         */
-    }, {
-        key: "isConfigLoaded",
-        value: function isConfigLoaded() {
-            return this.hasConfigloaded;
-        }
-
-        /*********************************************************************
-         * public non AVR methods
-         *********************************************************************/
-        /**
-         * Disconnects the network connects on request of "Homey" when it
-         * shuts down of reboots.
-         * Don't start a new connection after receiving the disconnect command.
-         */
-    }, {
-        key: "disconnect",
-        value: function disconnect() {
-
-            this._d("Disconnecting on request.");
-
-            this.server.emit("req_disconnect");
-        }
-
-        /*********************************************************************
-         * Power methods
-         *********************************************************************/
-
-        /**
-         * Finds the command of the requested power action and send it to the AVR.
-         *
-         * @param      {string}  cmd     The 'prog_id' string of the requested command.
-         * @private
-         */
-    }, {
-        key: "_powerCommand",
-        value: function _powerCommand(cmd) {
-            for (var I = 0; I < this.conf.power.length; I++) {
-                // If 'test' is set don't filter if the command is valid or not for
-                // this type of AVR.
-                if (this.test === 1) {
-                    if (this.conf.power[I].prog_id === cmd) {
-                        this._insertIntoSendBuffer(this.conf.power[I].command);
+                break;
+            case "MU":
+                /* ========================================================== */
+                /* - mute                                                     */
+                /* ========================================================== */
+                newStatus = xData;
+                oldStatus = this.muteStatus;
+                newi18n = "";
+                oldi18n = "";
+                this.muteStatus = xData;
+                if (this.hasNetworkConnection === true &&
+                    newStatus !== oldStatus) {
+                    for (var I = 0; I < this.conf.mute.length; I++) {
+                        if (newStatus === this.conf.mute[I].command) {
+                            newi18n = this.conf.mute[I].i18n;
+                        }
                     }
-                } else {
-                    if (this.conf.power[I].prog_id === cmd && this.conf.power[I].valid === true) {
-
-                        this._insertIntoSendBuffer(this.conf.power[I].command);
+                    for (var I = 0; I < this.conf.mute.length; I++) {
+                        if (oldStatus === this.conf.mute[I].command) {
+                            oldi18n = this.conf.mute[I].i18n;
+                        }
                     }
+                    this.comChannel.emit("mute_status_chg", this.avr_avrnum, this.avr_name, newi18n, oldi18n);
                 }
-            }
-        }
-
-        /**
-         * Switch on the main power of the AVR.
-         */
-    }, {
-        key: "powerOn",
-        value: function powerOn() {
-            this._powerCommand("power_on");
-        }
-
-        /**
-         * Switch off the main power of the AVR (standby)
-         */
-    }, {
-        key: "powerOff",
-        value: function powerOff() {
-            this._powerCommand("power_off");
-        }
-
-        /**
-         * Gets the avr power status.
-         * @private
-         */
-    }, {
-        key: "_getAVRPowerStatus",
-        value: function _getAVRPowerStatus() {
-            this._powerCommand("power_request");
-        }
-
-        /**
-         * Returns the i18n ident string of the current power status of the AVR.
-         * The string should be used to get the i18n string from locales/<lang>.json
-         * Current stored power status is used.
-         *
-         * @return     {string}  The i18n ident string as defined in the conf/<type>.json file.
-         */
-    }, {
-        key: "getPowerStatus",
-        value: function getPowerStatus() {
-
-            var retStr = "error.cmdnf";
-
-            for (var I = 0; I < this.conf.power.length; I++) {
-
-                if (this.powerStatus === this.conf.power[I].command) {
-                    retStr = this.conf.power[I].text;
-                    break;
-                }
-            }
-
-            return retStr;
-        }
-
-        /**
-         * Returns true (on) of false (off) based on the current stored power status.
-         *
-         * @return     {boolean}  The power on / off state.
-         */
-    }, {
-        key: "getPowerOnOffState",
-        value: function getPowerOnOffState() {
-
-            for (var I = 0; I < this.conf.power.length; I++) {
-                if (this.conf.power[I].prog_id === "power_on") {
-                    if (this.conf.power[I].command === this.powerStatus) {
-                        return true;
-                    } else {
-                        return false;
+                break;
+            case "MS":
+                /* ========================================================== */
+                /* - Surround mode                                            */
+                /* ========================================================== */
+                newStatus = xData;
+                oldStatus = this.surroundMode;
+                newi18n = "";
+                oldi18n = "";
+                this.surroundMode = xData;
+                if (this.hasNetworkConnection === true &&
+                    newStatus !== oldStatus) {
+                    for (var I = 0; I < this.conf.surround.length; I++) {
+                        if (newStatus === this.conf.surround[I].command) {
+                            newi18n = this.conf.surround[I].i18n;
+                        }
                     }
-                }
-            }
-        }
-
-        /*********************************************************************
-         * Main zone power methods
-         *********************************************************************/
-
-        /**
-         * Finds the command of the requested main zone power action and send it to the AVR.
-         *
-         * @param      {string}  cmd     The 'prog_id' string of the requested command.
-         * @private
-         */
-    }, {
-        key: "_mainZonePowerCommand",
-        value: function _mainZonePowerCommand(cmd) {
-            for (var I = 0; I < this.conf.main_zone_power.length; I++) {
-                // If 'test' is set don't filter if the command is valid for
-                // this type of AVR.
-                if (this.test === 1) {
-                    if (this.conf.main_zone_power[I].prog_id === cmd) {
-                        this._insertIntoSendBuffer(this.conf.main_zone_power[I].command);
+                    for (var I = 0; I < this.conf.surround.length; I++) {
+                        if (oldStatus === this.conf.surround[I].command) {
+                            oldi18n = this.conf.surround[I].i18n;
+                        }
                     }
-                } else {
-                    if (this.conf.main_zone_power[I].prog_id === cmd && this.conf.main_zone_power[I].valid === true) {
-
-                        this._insertIntoSendBuffer(this.conf.main_zone_power[I].command);
-                    }
+                    this.comChannel.emit("surround_status_chg", this.avr_avrnum, this.avr_name, newi18n, oldi18n);
                 }
-            }
-        }
-
-        /**
-         * Switch on the main zone power of the AVR
-         */
-    }, {
-        key: "mainZonePowerOn",
-        value: function mainZonePowerOn() {
-            this._mainZonePowerCommand("mzpower_on");
-        }
-
-        /**
-         * Switch of the main zone power of the AVR
-         */
-    }, {
-        key: "mainZonePowerOff",
-        value: function mainZonePowerOff() {
-            this._mainZonePowerCommand("mzpower_off");
-        }
-
-        /**
-         * Gets the avr main zone power status.
-         * @private
-         */
-    }, {
-        key: "_getAVRMainZonePowerStatus",
-        value: function _getAVRMainZonePowerStatus() {
-            this._mainZonePowerCommand("mzpower_request");
-        }
-
-        /**
-         * Returns the i18n ident string of the current main zone power status of the AVR.
-         * The string should be used to get the i18n string from locales/<lang>.json
-         * Current stored main zone power status is used.
-         *
-         * @return     {string}  The i18n ident string as defined in the conf/<type>.json file.
-         */
-    }, {
-        key: "getMainZonePowerStatus",
-        value: function getMainZonePowerStatus() {
-
-            var retStr = "error.cmdnf";
-
-            for (var I = 0; I < this.conf.main_zone_power.length; I++) {
-                if (this.mainZonePowerStatus === this.conf.main_zone_power[I].command) {
-                    retStr = this.conf.main_zone_power[I].text;
-                    break;
-                }
-            }
-
-            return retStr;
-        }
-
-        /**
-         * Returns true of false based on the current stored main zone power status.
-         *
-         * @return     {boolean}  The main zone power on off state.
-         */
-    }, {
-        key: "getMainZonePowerOnOffState",
-        value: function getMainZonePowerOnOffState() {
-
-            for (var I = 0; I < this.conf.main_zone_power.length; I++) {
-                if (this.conf.main_zone_power[I].prog_id === "mzpower_on") {
-                    if (this.conf.main_zone_power[I].command === this.powerMainZoneStatus) {
-                        return true;
-                    } else {
-                        return false;
+                break;
+            case "MV":
+                /* ========================================================== */
+                /* - Volume                                                   */
+                /* ========================================================== */
+                this._processVolume(xData);
+                break;
+            case "EC":
+                /* ========================================================== */
+                /* - Eco mode                                                 */
+                /* ========================================================== */
+                newStatus = xData;
+                oldStatus = this.ecoStatus;
+                newi18n = "";
+                oldi18n = "";
+                this.ecoStatus = xData;
+                if (this.hasNetworkConnection === true &&
+                    newStatus !== oldStatus) {
+                    for (var I = 0; I < this.conf.eco.length; I++) {
+                        if (newStatus === this.conf.eco[I].command) {
+                            newi18n = this.conf.eco[I].i18n;
+                        }
                     }
-                }
-            }
-        }
-
-        /*********************************************************************
-         * Mute methods
-         *********************************************************************/
-
-        /**
-        * Finds the command of the requested mute action and send it to the AVR.
-        *
-        * @param      {string}  cmd     The 'prog_id' string of the requested command.
-        * @private
-        */
-    }, {
-        key: "_MuteCommand",
-        value: function _MuteCommand(cmd) {
-            for (var I = 0; I < this.conf.mute.length; I++) {
-                // If 'test' is set don't filter if the command is valid for
-                // this type of AVR.
-                if (this.test === 1) {
-                    if (this.conf.mute[I].prog_id === cmd) {
-                        this._insertIntoSendBuffer(this.conf.mute[I].command);
+                    for (var I = 0; I < this.conf.eco.length; I++) {
+                        if (oldStatus === this.conf.eco[I].command) {
+                            oldi18n = this.conf.eco[I].i18n;
+                        }
                     }
-                } else {
-                    if (this.conf.mute[I].prog_id === cmd && this.conf.mute[I].valid === true) {
-
-                        this._insertIntoSendBuffer(this.conf.mute[I].command);
-                    }
+                    this.comChannel.emit("eco_status_chg", this.avr_avrnum, this.avr_name, newi18n, oldi18n);
                 }
-            }
+                break;
         }
-
-        /**
-         * Switch mute on
-         */
-    }, {
-        key: "muteOn",
-        value: function muteOn() {
-            this._MuteCommand("mute_on");
-        }
-
-        /**
-         * Switch mute off
-         */
-    }, {
-        key: "muteOff",
-        value: function muteOff() {
-            this._MuteCommand("mute_off");
-        }
-
-        /**
-         * Gets the avr mute status.
-         * @private
-         */
-    }, {
-        key: "_getAVRMuteStatus",
-        value: function _getAVRMuteStatus() {
-            this._MuteCommand("mute_request");
-        }
-
-        /**
-         * Returns the i18n ident string of the current mute status of the AVR.
-         * The string should be used to get the i18n string from locales/<lang>.json
-         * Current stored mute status is used.
-         *
-         * @return     {string}  The i18n ident string as defined in the conf/<type>.json file.
-         */
-    }, {
-        key: "getMuteStatus",
-        value: function getMuteStatus() {
-
-            var retStr = "error.cmdnf";
-
-            for (var I = 0; I < this.conf.mute.length; I++) {
-
-                if (this.muteStatus === this.conf.mute[I].command) {
-                    retStr = this.conf.mute[I].text;
-                    break;
-                }
-            }
-
-            return retStr;
-        }
-
-        /**
-         * Returns true of false based on the current stored mute status.
-         *
-         * @return     {boolean}  The mute on off state.
-         */
-    }, {
-        key: "getMuteOnOffState",
-        value: function getMuteOnOffState() {
-
-            for (var I = 0; I < this.conf.mute.length; I++) {
-                if (this.conf.mute[I].prog_id === "mute_on") {
-                    if (this.conf.mute[I].command === this.muteStatus) {
-                        return true;
-                    } else {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        /*********************************************************************
-         * Inputsource selection methods
-         *********************************************************************/
-
-        /**
-         * Finds the command of the requested input source and send it to the AVR.
-         *
-         * @param      {string}  cmd     The 'prog_id' string of the requested command.
-         * @private
-         */
-    }, {
-        key: "_selectInputSource",
-        value: function _selectInputSource(source) {
-
-            for (var I = 0; I < this.conf.inputsource.length; I++) {
-                // If 'test' is set don't filter if the command is valid for
-                // this type of AVR.
-                if (this.test === 1) {
-                    if (this.conf.inputsource[I].prog_id === source) {
-
-                        this._insertIntoSendBuffer(this.conf.inputsource[I].command);
-                    }
-                } else {
-                    if (this.conf.inputsource[I].prog_id === source && this.conf.inputsource[I].valid === true) {
-
-                        this._insertIntoSendBuffer(this.conf.inputsource[I].command);
-                    }
-                }
-            }
-        }
-
-        /**
-         * Returns the input source selection array with type supported sources.
-         *
-         * @return     {array}  The valid input selection array.
-         */
-    }, {
-        key: "getValidInputSelection",
-        value: function getValidInputSelection() {
-
-            return this.selAr;
-        }
-
-        /**
-         * Fill the command into the send buffer and start the send loop.
-         *
-         * @param      {string}  command_id  The command id string
-         */
-    }, {
-        key: "sendInputSourceCommand",
-        value: function sendInputSourceCommand(command_id) {
-            this._insertIntoSendBuffer(command_id);
-        }
-
-        /**
-         * Select Phono as input source
-         */
-    }, {
-        key: "selectInputSourcePhono",
-        value: function selectInputSourcePhono() {
-            this._selectInputSource("i_phono");
-        }
-
-        /**
-         * Select CD as input source
-         */
-    }, {
-        key: "selectInputSourceCd",
-        value: function selectInputSourceCd() {
-            this._selectInputSource("i_cd");
-        }
-
-        /**
-         * Select DVD as input source
-         */
-    }, {
-        key: "selectInputSourceDvd",
-        value: function selectInputSourceDvd() {
-            this._selectInputSource("i_dvd");
-        }
-
-        /**
-         * Select Bluray (bd) as input source
-         */
-    }, {
-        key: "selectInputSourceBluray",
-        value: function selectInputSourceBluray() {
-            this._selectInputSource("i_bd");
-        }
-
-        /**
-         * Select TV as input source
-         */
-    }, {
-        key: "selectInputSourceTv",
-        value: function selectInputSourceTv() {
-            this._selectInputSource("i_tv");
-        }
-
-        /**
-         * Select SAT/CBL as input source
-         */
-    }, {
-        key: "selectInputSourceSatCbl",
-        value: function selectInputSourceSatCbl() {
-            this._selectInputSource("i_sat_cbl");
-        }
-
-        /**
-         * Select SAT as input source
-         */
-    }, {
-        key: "selectInputSourceSat",
-        value: function selectInputSourceSat() {
-            this._selectInputSource("i_sat");
-        }
-
-        /**
-         * Select mplay as input source
-         */
-    }, {
-        key: "selectInputSourceMplay",
-        value: function selectInputSourceMplay() {
-            this._selectInputSource("i_mplay");
-        }
-
-        /**
-         * Select VCR as input source
-         */
-    }, {
-        key: "selectInputSourceVcr",
-        value: function selectInputSourceVcr() {
-            this._selectInputSource("i_vcr");
-        }
-
-        /**
-         * Select game as input source
-         */
-    }, {
-        key: "selectInputSourceGame",
-        value: function selectInputSourceGame() {
-            this._selectInputSource("i_game");
-        }
-
-        /**
-         * Select V.AUX as input source
-         */
-    }, {
-        key: "selectInputSourceVaux",
-        value: function selectInputSourceVaux() {
-            this._selectInputSource("i_vaux");
-        }
-
-        /**
-         * Select Tuner as input source
-         */
-    }, {
-        key: "selectInputSourceTuner",
-        value: function selectInputSourceTuner() {
-            this._selectInputSource("i_tuner");
-        }
-
-        /**
-         * Select spotify as input source
-         */
-    }, {
-        key: "selectInputSourceSpotify",
-        value: function selectInputSourceSpotify() {
-            this._selectInputSource("i_spotify");
-        }
-
-        /**
-         * Select napster as input source
-         */
-    }, {
-        key: "selectInputSourceNapster",
-        value: function selectInputSourceNapster() {
-            this._selectInputSource("i_napster");
-        }
-
-        /**
-         * Select flickr as input source
-         */
-    }, {
-        key: "selectInputSourceFlickr",
-        value: function selectInputSourceFlickr() {
-            this._selectInputSource("i_flickr");
-        }
-
-        /**
-         * Select iradio as input source
-         */
-    }, {
-        key: "selectInputSourceIradio",
-        value: function selectInputSourceIradio() {
-            this._selectInputSource("i_iradio");
-        }
-
-        /**
-         * Select favorites as input source
-         */
-    }, {
-        key: "selectInputSourceFavorites",
-        value: function selectInputSourceFavorites() {
-            this._selectInputSource("i_favorites");
-        }
-
-        /**
-         * Select AUX1 as input source
-         */
-    }, {
-        key: "selectInputSourceAux1",
-        value: function selectInputSourceAux1() {
-            this._selectInputSource("i_aux1");
-        }
-
-        /**
-         * Select AUX2 as input source
-         */
-    }, {
-        key: "selectInputSourceAux2",
-        value: function selectInputSourceAux2() {
-            this._selectInputSource("i_aux2");
-        }
-
-        /**
-         * Select AUX3 as input source
-         */
-    }, {
-        key: "selectInputSourceAux3",
-        value: function selectInputSourceAux3() {
-            this._selectInputSource("i_aux3");
-        }
-
-        /**
-         * Select AUX4 as input source
-         */
-    }, {
-        key: "selectInputSourceAux4",
-        value: function selectInputSourceAux4() {
-            this._selectInputSource("i_aux4");
-        }
-
-        /**
-         * Select AUX5 as input source
-         */
-    }, {
-        key: "selectInputSourceAux5",
-        value: function selectInputSourceAux5() {
-            this._selectInputSource("i_aux5");
-        }
-
-        /**
-         * Select AUX6 as input source
-         */
-    }, {
-        key: "selectInputSourceAux6",
-        value: function selectInputSourceAux6() {
-            this._selectInputSource("i_aux6");
-        }
-
-        /**
-         * Select AUX7 as input source
-         */
-    }, {
-        key: "selectInputSourceAux7",
-        value: function selectInputSourceAux7() {
-            this._selectInputSource("i_aux7");
-        }
-
-        /**
-         * Select net/usb as input source
-         */
-    }, {
-        key: "selectInputSourceInetUsb",
-        value: function selectInputSourceInetUsb() {
-            this._selectInputSource("i_net_usb");
-        }
-
-        /**
-         * Select net as input source
-         */
-    }, {
-        key: "selectInputSourceNet",
-        value: function selectInputSourceNet() {
-            this._selectInputSource("i_net");
-        }
-
-        /**
-         * Select bluetooth (bt) as input source
-         */
-    }, {
-        key: "selectInputSourceBluetooth",
-        value: function selectInputSourceBluetooth() {
-            this._selectInputSource("i_bt");
-        }
-
-        /**
-         * Select mxport as input source
-         */
-    }, {
-        key: "selectInputSourceMxport",
-        value: function selectInputSourceMxport() {
-            this._selectInputSource("i_mxport");
-        }
-
-        /**
-         * Select usb-ipod as input source
-         */
-    }, {
-        key: "selectInputSourceUsbIpod",
-        value: function selectInputSourceUsbIpod() {
-            this._selectInputSource("i_usb_ipod");
-        }
-
-        /**
-         * Gets the avr input selection.
-         * @private
-         */
-    }, {
-        key: "_getAVRInputSelection",
-        value: function _getAVRInputSelection() {
-            this._selectInputSource("i_request");
-        }
-
-        /**
-         * Returns the i18n ident string of the current inputsource of the AVR.
-         * The string should be used to get the i18n string from locales/<lang>.json
-         * Current stored mute status is used.
-         *
-         * @return     {string}  The i18n ident string as defined in the conf/<type>.json file.
-         */
-    }, {
-        key: "getInputSelection",
-        value: function getInputSelection() {
-
-            var retStr = "error.cmdnf";
-
-            for (var I = 0; I < this.conf.inputsource.length; I++) {
-
-                if (this.inputSourceSelection === this.conf.inputsource[I].command) {
-                    retStr = this.conf.inputsource[I].i18n;
-                    break;
-                }
-            }
-
-            return retStr;
-        }
-
-        /*********************************************************************
-         * Volume methods
-         *********************************************************************/
-
-        /**
-         * Finds the command of the requested volume action and fills the send buffer
-         *
-         * @param      {string}  cmd     The command
-         * @param      {string}  level   The level to set the volume.
-         * @private
-         */
-    }, {
-        key: "_volumeCommand",
-        value: function _volumeCommand(cmd, level) {
-            for (var I = 0; I < this.conf.volume.length; I++) {
-                // If 'test' is set don't filter if the command is valid for
-                // this type of AVR.
-                if (this.test === 1) {
-                    if (this.conf.volume[I].prog_id === cmd) {
-                        this._insertIntoSendBuffer(this.conf.volume[I].command + ("" + level));
-                    }
-                } else {
-                    if (this.conf.volume[I].prog_id === cmd && this.conf.volume[I].valid === true) {
-
-                        this._insertIntoSendBuffer(this.conf.volume[I].command + ("" + level));
-                    }
-                }
-            }
-        }
-
-        /**
-         * Increase the volume
-         */
-    }, {
-        key: "volumeUp",
-        value: function volumeUp() {
-            this._volumeCommand("volume_up", "");
-        }
-
-        /**
-         * Decrease the volume
-         */
-    }, {
-        key: "volumeDown",
-        value: function volumeDown() {
-            this._volumeCommand("volume_down", "");
-        }
-
-        /**
-         * Sets the volume level.
-         *
-         * @param      {number}  level   The requested volume level
-         */
-    }, {
-        key: "setVolume",
-        value: function setVolume(level) {
-            if (level >= 0 && level < 80) {
-                this._volumeCommand("volume_set", level);
-            }
-        }
-
-        /**
-         * Gets the avr volume status.
-         */
-    }, {
-        key: "_getAVRVolumeStatus",
-        value: function _getAVRVolumeStatus() {
-            this._volumeCommand("volume_request", "");
-        }
-
-        /**
-         * Returns the current volume level if known otherwise "unknown".
-         *
-         * @return     {string}  The volume level.
-         */
-    }, {
-        key: "getVolume",
-        value: function getVolume() {
-            this._d("volume is " + this.volumeStatus + ".");
-
+    };
+    /**
+     * Processes the volume status strng from the AVR.
+     * @param {string} volume The volume status.
+     * @private
+     */
+    AVR.prototype._processVolume = function (volume) {
+        this._d("Processing Volume: " + volume + ".");
+        if (volume.match(/^MVMAX .*/) == null) {
+            this._d("Setting volume status to " + volume + ".");
+            this.volumeStatus = volume;
             var re = /^MV(\d+)/i;
-
-            var Ar = this.volumeStatus.match(re);
-
+            var Ar = volume.match(re);
             if (Ar !== null) {
-                return Ar[1];
-            } else {
-                return "unknown";
+                this.comChannel.emit("volume_status_chg", this.avr_avrnum, this.avr_name, Ar[1]);
             }
         }
-
-        /*********************************************************************
-         * surround methods
-         *********************************************************************/
-
-        /**
-         * Finds the command of the requested surround action and fills the send buffer.
-         *
-         * @param      {string}  cmd     The 'prog_id' string of the requested command.
-         * @private
-         */
-    }, {
-        key: "_setSurroundMode",
-        value: function _setSurroundMode(cmd) {
-            for (var I = 0; I < this.conf.surround.length; I++) {
-                // If 'test' is set don't filter if the command is valid for
-                // this type of AVR.
-                if (this.test === 1) {
-                    if (this.conf.surround[I].prog_id === cmd) {
-                        this._insertIntoSendBuffer(this.conf.surround[I].command);
-                    }
-                } else {
-                    if (this.conf.surround[I].prog_id === cmd && this.conf.surround[I].valid === true) {
-
-                        this._insertIntoSendBuffer(this.conf.surround[I].command);
-                    }
+    };
+    /**
+     * Get the status fromthe AVR once the network coonction is established
+     * @private
+     */
+    AVR.prototype._getAVRstatusUpdate = function () {
+        this._getAvrPowerStatus();
+        this._getAvrMainZonePowerStatus();
+        this._getAvrInputSourceSelection();
+        this._getAvrMuteStatus();
+        this._getAvrVolumeStatus();
+        this._getAvrSurroundMode();
+        this._getAvrEcoStatus();
+    };
+    /* ================================================================== */
+    /* - Debug methods                                                    */
+    /* ================================================================== */
+    /**
+     * Enable debug output messages to console.
+     */
+    AVR.prototype.setConsoleToDebug = function () {
+        this.consoleOut = true;
+        this._d("AVR debug switch on.");
+    };
+    AVR.prototype.setConsoleOff = function () {
+        this._d("AVR debug switch off.");
+        this.consoleOut = false;
+    };
+    /**
+     * Override avr type filtering (testing only!.)
+     * @private
+     */
+    AVR.prototype.setTest = function () {
+        this.filter = false;
+    };
+    /**
+     * Return to standard filtering mode (testing only!)
+     * @private
+     */
+    AVR.prototype.clearTest = function () {
+        this.filter = false;
+    };
+    /**
+     * Send (conditionally) a debug message to console.log (debug only!)
+     * @private
+     * @param {string} str the debug message.
+     */
+    AVR.prototype._d = function (str) {
+        if (this.consoleOut === true) {
+            this.comChannel.emit("debug_log", this.avr_avrnum, this.avr_name, str);
+        }
+    };
+    /* ================================================================== */
+    /* - get AVR initial parameters                                       */
+    /* ================================================================== */
+    /**
+     * Get the current hostname
+     * @return {string} The hostname or IP address.
+     */
+    AVR.prototype.getHostname = function () {
+        return this.avr_host;
+    };
+    /**
+     * Get the current port number
+     * @return {number} The current port number.
+     */
+    AVR.prototype.getPort = function () {
+        return this.avr_port;
+    };
+    /**
+     * Get the current AVR type.
+     * @return {string} The current AVR type.
+     */
+    AVR.prototype.getType = function () {
+        return this.avr_type;
+    };
+    /**
+     * Get the current home name of the AVR.
+     * @return {string} The current name.
+     */
+    AVR.prototype.getName = function () {
+        return this.avr_name;
+    };
+    /**
+     * Get the internal indev/
+     * @return {number} The internal index
+     */
+    AVR.prototype.getNum = function () {
+        return this.avr_avrnum;
+    };
+    /**
+     * Is the AVR configuration loaded?
+     * @return {boolean} true => loaded, false => not loaded.
+     */
+    AVR.prototype.isConfigLoaded = function () {
+        return this.hasConfigLoaded;
+    };
+    /* ================================================================== */
+    /* - Public non AVR commands                                          */
+    /* ================================================================== */
+    /**
+     * Disconnect on request of the user or Homey.
+     */
+    AVR.prototype.disconnect = function () {
+        this._d("Disconnecting on request.");
+        this.eventch.emit("req_disconnect");
+    };
+    /* ================================================================== */
+    /* - Power methods                                                    */
+    /* ================================================================== */
+    /**
+     * Find the command of the requested power action and send it to the AVR.
+     * @param {string} cmd The "prog_id" string of the requested command.
+     * @private
+     */
+    AVR.prototype._powerCommand = function (cmd) {
+        for (var I = 0; I < this.conf.power.length; I++) {
+            if (this.filter == false) {
+                if (this.conf.power[I].prog_id === cmd) {
+                    this._insertIntoSendBuffer(this.conf.power[I].command);
+                }
+            }
+            else {
+                if (this.conf.power[I].prog_id === cmd &&
+                    this.conf.power[I].valid === true) {
+                    this._insertIntoSendBuffer(this.conf.power[I].command);
                 }
             }
         }
-
-        /**
-         * Returns the surround array with the AVR type support surround modes.
-         *
-         * @return     {array}  The surround supported mode array.
-         */
-    }, {
-        key: "getValidSurround",
-        value: function getValidSurround() {
-
-            return this.surroundAr;
+    };
+    /**
+     * Switch on the power of the AVR
+     */
+    AVR.prototype.powerOn = function () {
+        this._powerCommand("power_on");
+    };
+    /**
+     * Switch the AVR power off / standby.
+     */
+    AVR.prototype.powerOff = function () {
+        this._powerCommand("power_off");
+    };
+    /**
+     * Request power status from the AVR.
+     * @private
+     */
+    AVR.prototype._getAvrPowerStatus = function () {
+        this._powerCommand("power_request");
+    };
+    /**
+     * Get the i18n current power status.
+     * @return {string} The i18n current power status string
+     */
+    AVR.prototype.getPoweri18nStatus = function () {
+        var retStr = "error.cmdnf";
+        for (var I = 0; I < this.conf.power.length; I++) {
+            if (this.powerStatus === this.conf.power[I].command) {
+                retStr = this.conf.power[I].i18n;
+                break;
+            }
         }
-
-        /**
-         * Send the surrounf command to the send bugger and start the even loop.
-         *
-         * @param      {string}  command  The command
-         */
-    }, {
-        key: "sendSurroundCommand",
-        value: function sendSurroundCommand(command) {
+        return retStr;
+    };
+    /**
+     * Get the boolean power status. (true => power on, false => power off).
+     * @return {boolean} Power status.
+     */
+    AVR.prototype.getPowerOnOffState = function () {
+        for (var I = 0; I < this.conf.power.length; I++) {
+            if (this.conf.power[I].prog_id === "power_on") {
+                if (this.conf.power[I].command === this.powerStatus) {
+                    return true;
+                }
+                else {
+                    return false;
+                }
+            }
+        }
+    };
+    /* ================================================================== */
+    /* - Main zone power methods                                          */
+    /* ================================================================== */
+    /**
+     * Find the command of the requested main zone power action
+     * and send it to the AVR.
+     * @param {string} cmd The "prog_id" string of the requested command.
+     * @private
+     */
+    AVR.prototype._mainZonepowerCommand = function (cmd) {
+        for (var I = 0; I < this.conf.main_zone_power.length; I++) {
+            if (this.filter == false) {
+                if (this.conf.main_zone_power[I].prog_id === cmd) {
+                    this._insertIntoSendBuffer(this.conf.main_zone_power[I].command);
+                }
+            }
+            else {
+                if (this.conf.main_zone_power[I].prog_id === cmd &&
+                    this.conf.main_zone_power[I].valid === true) {
+                    this._insertIntoSendBuffer(this.conf.main_zone_power[I].command);
+                }
+            }
+        }
+    };
+    /**
+     * Switch on the main zone power of the AVR
+     */
+    AVR.prototype.mainZonePowerOn = function () {
+        this._mainZonepowerCommand("mzpower_on");
+    };
+    /**
+     * Switch the AVR main zone power off / standby.
+     */
+    AVR.prototype.mainZonePowerOff = function () {
+        this._mainZonepowerCommand("mzpower_off");
+    };
+    /**
+     * Request main zone power status from the AVR.
+     * @private
+     */
+    AVR.prototype._getAvrMainZonePowerStatus = function () {
+        this._mainZonepowerCommand("mzpower_request");
+    };
+    /**
+     * Get the i18n current power status.
+     * @return {string} The i18n current power status string
+     */
+    AVR.prototype.getMainZonePoweri18nStatus = function () {
+        var retStr = "error.cmdnf";
+        for (var I = 0; I < this.conf.main_zone_power.length; I++) {
+            this._d(this.mainZonePowerStatus + " <> " + this.conf.main_zone_power[I].command + ".");
+            if (this.mainZonePowerStatus === this.conf.main_zone_power[I].command) {
+                retStr = this.conf.main_zone_power[I].i18n;
+                break;
+            }
+        }
+        return retStr;
+    };
+    /**
+     * Get the boolean main zone power status. (true => power on, false => power off).
+     * @return {boolean} Power status.
+     */
+    AVR.prototype.getMainZonePowerOnOffState = function () {
+        for (var I = 0; I < this.conf.main_zone_power.length; I++) {
+            if (this.conf.main_zone_power[I].prog_id === "mzpower_on") {
+                if (this.conf.main_zone_power[I].command === this.mainZonePowerStatus) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    /* ================================================================== */
+    /* - Mute methods                                                     */
+    /* ================================================================== */
+    /**
+     * Find the command of the requested mute action
+     * and send it to the AVR.
+     * @param {string} cmd The "prog_id" string of the requested command.
+     * @private
+     */
+    AVR.prototype._muteCommand = function (cmd) {
+        for (var I = 0; I < this.conf.mute.length; I++) {
+            if (this.filter == false) {
+                if (this.conf.mute[I].prog_id === cmd) {
+                    this._insertIntoSendBuffer(this.conf.mute[I].command);
+                }
+            }
+            else {
+                if (this.conf.mute[I].prog_id === cmd &&
+                    this.conf.mute[I].valid === true) {
+                    this._insertIntoSendBuffer(this.conf.mute[I].command);
+                }
+            }
+        }
+    };
+    /**
+     * Switch mute on.
+     */
+    AVR.prototype.muteOn = function () {
+        this._muteCommand("mute_on");
+    };
+    /**
+     * Switch mute off
+     */
+    AVR.prototype.muteOff = function () {
+        this._muteCommand("mute_off");
+    };
+    /**
+     * Get the current mute status from the AVR
+     * @private
+     */
+    AVR.prototype._getAvrMuteStatus = function () {
+        this._muteCommand("mute_request");
+    };
+    /**
+     * Get the i18n current mute status.
+     * @return {string} The i18n current mute status string
+     */
+    AVR.prototype.getMutei18nStatus = function () {
+        var retStr = "error.cmdnf";
+        for (var I = 0; I < this.conf.mute.length; I++) {
+            if (this.muteStatus === this.conf.mute[I].command) {
+                retStr = this.conf.mute[I].i18n;
+                break;
+            }
+        }
+        return retStr;
+    };
+    /**
+     * Get the boolean mute status. (true => on, false => off).
+     * @return {boolean} Mute status.
+     */
+    AVR.prototype.getMuteOnOffState = function () {
+        for (var I = 0; I < this.conf.mute.length; I++) {
+            if (this.conf.mute[I].prog_id === "mute_on") {
+                if (this.conf.mute[I].command === this.muteStatus) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    /* ================================================================== */
+    /* - InputSource methods                                                     */
+    /* ================================================================== */
+    /**
+     * Find the command of the requested inputsource action
+     * and send it to the AVR.
+     * @param {string} cmd The "prog_id" string of the requested command.
+     * @private
+     */
+    AVR.prototype._inputSourceCommand = function (cmd) {
+        for (var I = 0; I < this.conf.inputsource.length; I++) {
+            if (this.filter == false) {
+                if (this.conf.inputsource[I].prog_id === cmd) {
+                    this._insertIntoSendBuffer(this.conf.inputsource[I].command);
+                }
+            }
+            else {
+                if (this.conf.inputsource[I].prog_id === cmd &&
+                    this.conf.inputsource[I].valid === true) {
+                    this._insertIntoSendBuffer(this.conf.inputsource[I].command);
+                }
+            }
+        }
+    };
+    /**
+     * Get the supported input selection for the AVR type.
+     * @return {string[]}  Array (i18n,command) of the supported sources.
+     */
+    AVR.prototype.getValidInputSelection = function () {
+        return this.selAr;
+    };
+    /**
+     * Select given input Source.
+     * @param {string} command_id The input source command.
+     */
+    AVR.prototype.selectInputSource = function (command) {
+        this._insertIntoSendBuffer(command);
+    };
+    /**
+     * Select Phono as inputsource.
+     */
+    AVR.prototype.selectInputSourcePhono = function () {
+        this._inputSourceCommand("i_phono");
+    };
+    /**
+     * Select CD as input source.
+     */
+    AVR.prototype.selectInputSourceCd = function () {
+        this._inputSourceCommand("i_cd");
+    };
+    /**
+     * Select DVD as input source.
+     */
+    AVR.prototype.selectInputSourceDvd = function () {
+        this._inputSourceCommand("i_dvd");
+    };
+    /**
+     * Select Bluray as input source
+     */
+    AVR.prototype.selectInputSourceBluray = function () {
+        this._inputSourceCommand("i_bd");
+    };
+    /**
+     * Select TV as input source
+     */
+    AVR.prototype.selectInputSourceTv = function () {
+        this._inputSourceCommand("i_tv");
+    };
+    /**
+     * Select SAT/CBL as input source.
+     */
+    AVR.prototype.selectInputSourceSatCbl = function () {
+        this._inputSourceCommand("i_sat_cbl");
+    };
+    /**
+     * Select SAT as input source.
+     */
+    AVR.prototype.selectInputSourceSat = function () {
+        this._inputSourceCommand("i_sat");
+    };
+    /**
+     * Select MPlay as input source
+     */
+    AVR.prototype.selectInputSourceMplay = function () {
+        this._inputSourceCommand("i_mplay");
+    };
+    /**
+     * Select VCR as input source.
+     */
+    AVR.prototype.selectInputSourceVcr = function () {
+        this._inputSourceCommand("i_vcr");
+    };
+    /**
+     * Select GAME as input source
+     */
+    AVR.prototype.selectInputSourceGame = function () {
+        this._inputSourceCommand("i_game");
+    };
+    /**
+     * Select V-AUX as input source
+     */
+    AVR.prototype.selectInputSourceVaux = function () {
+        this._inputSourceCommand("i_vaux");
+    };
+    /**
+     * Select TUNER as input source
+     */
+    AVR.prototype.selectInputSourceTuner = function () {
+        this._inputSourceCommand("i_tuner");
+    };
+    /**
+     * Select Spotify as input source.
+     */
+    AVR.prototype.selectInputSourceSpotify = function () {
+        this._inputSourceCommand("i_spotify");
+    };
+    /**
+     * Select Napster as input source.
+     */
+    AVR.prototype.selectInputSourceNapster = function () {
+        this._inputSourceCommand("i_napster");
+    };
+    /**
+     * Select FLICKR as input source.
+     */
+    AVR.prototype.selectInputSourceFlickr = function () {
+        this._inputSourceCommand("i_flickr");
+    };
+    /**
+     * Select Internet Radio as input source.
+     */
+    AVR.prototype.selectInputSourceIradio = function () {
+        this._inputSourceCommand("i_iradio");
+    };
+    /**
+     * Seletc Favorites aas input source.
+     */
+    AVR.prototype.selectInputSourceFavorites = function () {
+        this._inputSourceCommand("i_favorites");
+    };
+    /**
+     * Select AUX1 as input source/
+     */
+    AVR.prototype.selectInputSourceAux1 = function () {
+        this._inputSourceCommand("i_aux1");
+    };
+    /**
+     * Select AUX2 as input source/
+     */
+    AVR.prototype.selectInputSourceAux2 = function () {
+        this._inputSourceCommand("i_aux2");
+    };
+    /**
+     * Select AUX3 as input source/
+     */
+    AVR.prototype.selectInputSourceAux3 = function () {
+        this._inputSourceCommand("i_aux3");
+    };
+    /**
+     * Select AUX4 as input source/
+     */
+    AVR.prototype.selectInputSourceAux4 = function () {
+        this._inputSourceCommand("i_aux4");
+    };
+    /**
+     * Select AUX5 as input source/
+     */
+    AVR.prototype.selectInputSourceAux5 = function () {
+        this._inputSourceCommand("i_aux5");
+    };
+    /**
+     * Select AUX6 as input source/
+     */
+    AVR.prototype.selectInputSourceAux6 = function () {
+        this._inputSourceCommand("i_aux6");
+    };
+    /**
+     * Select AUX7 as input source/
+     */
+    AVR.prototype.selectInputSourceAux7 = function () {
+        this._inputSourceCommand("i_aux7");
+    };
+    /**
+     * Select Net/USB as input source.
+     */
+    AVR.prototype.selectInputSourceNetUsb = function () {
+        this._inputSourceCommand("i_net_usb");
+    };
+    /**
+     * Select NET as input source.
+     */
+    AVR.prototype.selectInputSourceNet = function () {
+        this._inputSourceCommand("i_net");
+    };
+    /**
+     * Select Blutooth as input source.
+     */
+    AVR.prototype.selectInputSourceBluetooth = function () {
+        this._inputSourceCommand("i_bt");
+    };
+    /**
+     * Select MXport as input source.
+     */
+    AVR.prototype.selectInputSourceMxport = function () {
+        this._inputSourceCommand("i_mxport");
+    };
+    /**
+     * Select USB/IPOD as input source.
+     */
+    AVR.prototype.selectInputSourceUsbIpod = function () {
+        this._inputSourceCommand("i_usb_ipod");
+    };
+    /**
+     * Get the current input source selection from the AVR.
+     * @private
+     */
+    AVR.prototype._getAvrInputSourceSelection = function () {
+        this._inputSourceCommand("i_request");
+    };
+    AVR.prototype.getInputSourceI18n = function () {
+        var retStr = "error.cmdnf";
+        for (var I = 0; I < this.conf.inputsource.length; I++) {
+            if (this.inputSourceSelection === this.conf.inputsource[I].command) {
+                retStr = this.conf.inputsource[I].i18n;
+                break;
+            }
+        }
+        return retStr;
+    };
+    /* ================================================================== */
+    /* - Volume methods                                                   */
+    /* ================================================================== */
+    /**
+     * Find the command of the requested volume action
+     * and send it to the AVR.
+     * @param {string} cmd The "prog_id" string of the requested command.
+     * @private
+     */
+    AVR.prototype._volumeCommand = function (cmd, level) {
+        var levelStr = "";
+        if (level !== -1) {
+            levelStr = level.toString();
+        }
+        for (var I = 0; I < this.conf.volume.length; I++) {
+            if (this.filter == false) {
+                if (this.conf.volume[I].prog_id === cmd) {
+                    this._insertIntoSendBuffer(this.conf.volume[I].command + ("" + levelStr));
+                }
+            }
+            else {
+                if (this.conf.volume[I].prog_id === cmd &&
+                    this.conf.volume[I].valid === true) {
+                    this._insertIntoSendBuffer(this.conf.volume[I].command + ("" + levelStr));
+                }
+            }
+        }
+    };
+    /**
+     * Increase volume
+     */
+    AVR.prototype.volumeUp = function () {
+        this._volumeCommand("volume_up", -1);
+    };
+    /**
+     * Decrease volume.
+     */
+    AVR.prototype.volumeDown = function () {
+        this._volumeCommand("volume_down", -1);
+    };
+    /**
+     * Set volume to 'level'.
+     * @param {number} level New volume level.
+     */
+    AVR.prototype.setVolume = function (level) {
+        if (level >= 0 && level < MAX_VOLUME) {
+            this._volumeCommand("volume_set", level);
+        }
+    };
+    /**
+     * Get the current volume setting from the AVR
+     * @private
+     */
+    AVR.prototype._getAvrVolumeStatus = function () {
+        this._volumeCommand("volume_request", -1);
+    };
+    /**
+     * Get the current volume setting if known otherwise "_unknown_".
+     * @return {string} The volume.
+     */
+    AVR.prototype.getVolume = function () {
+        this._d("volume is " + this.volumeStatus + ".");
+        var re = /^MV(\d+)/i;
+        var Ar = this.volumeStatus.match(re);
+        if (Ar !== null) {
+            return Ar[1];
+        }
+        else {
+            return "_unknown_";
+        }
+    };
+    /* ================================================================== */
+    /* - Surround methods                                                 */
+    /* ================================================================== */
+    /**
+     * Find the command of the requested surround action
+     * and send it to the AVR.
+     * @param {string} cmd The "prog_id" string of the requested command.
+     * @private
+     */
+    AVR.prototype._surroundCommand = function (cmd) {
+        for (var I = 0; I < this.conf.surround.length; I++) {
+            if (this.filter == false) {
+                if (this.conf.surround[I].prog_id === cmd) {
+                    this._insertIntoSendBuffer(this.conf.surround[I].command);
+                }
+            }
+            else {
+                if (this.conf.surround[I].prog_id === cmd &&
+                    this.conf.surround[I].valid === true) {
+                    this._insertIntoSendBuffer(this.conf.surround[I].command);
+                }
+            }
+        }
+    };
+    /**
+     * Get the support surround commands for th AVR type.
+     * @return {SelectionInfo[]} The supported surround command array.
+     */
+    AVR.prototype.getValidSurround = function () {
+        return this.surroundAr;
+    };
+    /**
+     * Set surround mode to "command".
+     * @param {string} command The diesired surround mode.
+     */
+    AVR.prototype.setSurrroundCommand = function (command) {
+        this._insertIntoSendBuffer(command);
+    };
+    /**
+     * Set surround mode to "movies".
+     */
+    AVR.prototype.setSurroundModeToMovies = function () {
+        this._surroundCommand("s_movie");
+    };
+    /**
+     * Set surround mode to "music".
+     */
+    AVR.prototype.setSurroundModeToMusic = function () {
+        this._surroundCommand("s_music");
+    };
+    /**
+     * Set surround mode to 'game'.
+     */
+    AVR.prototype.setSurroundModeToGame = function () {
+        this._surroundCommand("s_game");
+    };
+    /**
+     * Set surround mode to 'direct'.
+     */
+    AVR.prototype.setSurroundModeToDirect = function () {
+        this._surroundCommand("s_direct");
+    };
+    /**
+     * Set surrond mode to 'pure-direct'.
+     */
+    AVR.prototype.setSurroundModeToPureDirect = function () {
+        this._surroundCommand("s_pure");
+    };
+    /**
+     * Set surround mode to "stereo".
+     */
+    AVR.prototype.setSurroundModeToStereo = function () {
+        this._surroundCommand("s_stereo");
+    };
+    /**
+     * Set surround mode to "auto".
+     */
+    AVR.prototype.setSurroundModeToAuto = function () {
+        this._surroundCommand("s_auto");
+    };
+    /**
+     * Set surround mode to 'neural'.
+     */
+    AVR.prototype.setSurroundModeToNeural = function () {
+        this._surroundCommand("s_neural");
+    };
+    /**
+     * Set surround mode  to "standard".
+     */
+    AVR.prototype.setSurroundModeToStandard = function () {
+        this._surroundCommand("s_standard");
+    };
+    /**
+     * Set surround mode to 'dolby'.
+     */
+    AVR.prototype.setSurroundModeToDolby = function () {
+        this._surroundCommand("s_dobly");
+    };
+    /**
+     * Set surround mode to "dts".
+     */
+    AVR.prototype.setSurroundModeToDts = function () {
+        this._surroundCommand("s_dts");
+    };
+    /**
+     * Set surround mode to "multi channel stereo".
+     */
+    AVR.prototype.setSurroundModeToMultiChannel = function () {
+        this._surroundCommand("s_mchstereo");
+    };
+    /**
+     * Set surround mode to "matrix".
+     */
+    AVR.prototype.setSurroundModeToMatrix = function () {
+        this._surroundCommand("s_matrix");
+    };
+    /**
+     * Set surround mode to "virtual".
+     */
+    AVR.prototype.setSurroundModeToVirtual = function () {
+        this._surroundCommand("s_virtual");
+    };
+    /**
+     * Set surround mode to "left".
+     */
+    AVR.prototype.setSurroundModeToLeft = function () {
+        this._surroundCommand("s_left");
+    };
+    /**
+     * Set surround mode to 'right'.
+     */
+    AVR.prototype.setSurroundModeToRight = function () {
+        this._surroundCommand("s_right");
+    };
+    /**
+     * Get the current surround mode from the AVR.
+     * $private
+     */
+    AVR.prototype._getAvrSurroundMode = function () {
+        this._surroundCommand("s_request");
+    };
+    /**
+     * Get the i18n surround mode text.
+     * @return {string} The i18n string.
+     */
+    AVR.prototype.geti18nSurroundMode = function () {
+        var retStr = "error.cmdnf";
+        for (var I = 0; I < this.conf.surround.length; I++) {
+            if (this.surroundMode === this.conf.surround[I].command) {
+                retStr = this.conf.surround[I].i18n;
+                break;
+            }
+        }
+        return retStr;
+    };
+    /* ================================================================== */
+    /* - Eco methods                                                      */
+    /* ================================================================== */
+    /**
+     * Find the command of the requested eco action
+     * and send it to the AVR.
+     * @param {string} cmd The "prog_id" string of the requested command.
+     * @private
+     */
+    AVR.prototype._ecoCommand = function (cmd) {
+        for (var I = 0; I < this.conf.eco.length; I++) {
+            if (this.filter == false) {
+                if (this.conf.eco[I].prog_id === cmd) {
+                    this._insertIntoSendBuffer(this.conf.eco[I].command);
+                }
+            }
+            else {
+                if (this.conf.eco[I].prog_id === cmd &&
+                    this.conf.eco[I].valid === true) {
+                    this._insertIntoSendBuffer(this.conf.eco[I].command);
+                }
+            }
+        }
+    };
+    /**
+     * Get the supported eco modes of the AVR type.
+     * @return {SelectionInfo[]} The supported eco command.
+     */
+    AVR.prototype.getValidEcoModes = function () {
+        return this.ecoAr;
+    };
+    /**
+     * Send a eco command to the AVR.
+     * @param {string} command The eco command
+     */
+    AVR.prototype.sendEcoCommand = function (command) {
+        if (command !== "eco_not_supported") {
             this._insertIntoSendBuffer(command);
         }
-
-        /**
-         * Sets the surround mode to movies.
-         */
-    }, {
-        key: "setSurroundModeToMovies",
-        value: function setSurroundModeToMovies() {
-            this._setSurroundMode("s_movie");
+        else {
+            this._d("Eco is not supported for this type.");
         }
-
-        /**
-         * Sets the surround mode to music.
-         */
-    }, {
-        key: "setSurroundModeToMusic",
-        value: function setSurroundModeToMusic() {
-            this._setSurroundMode("s_music");
+    };
+    /**
+     * Check if this type supports eco commands (true=> yes, false=> no)
+     * @return {boolean} The eco support status.
+     */
+    AVR.prototype.hasEco = function () {
+        if (this.conf.eco[0].valid === true) {
+            return true;
         }
-
-        /**
-         * Sets the surround mode to game.
-         */
-    }, {
-        key: "setSurroundModeToGame",
-        value: function setSurroundModeToGame() {
-            this._setSurroundMode("s_game");
+        else {
+            return false;
         }
-
-        /**
-         * Sets the surround mode to direct.
-         */
-    }, {
-        key: "setSurroundModeToDirect",
-        value: function setSurroundModeToDirect() {
-            this._setSurroundMode("s_direct");
+    };
+    /**
+     * Switch eco mode on.
+     */
+    AVR.prototype.ecoOn = function () {
+        if (this.hasEco() === true) {
+            this._ecoCommand("eco_on");
         }
-
-        /**
-         * Sets the surround mode to pure direct.
-         */
-    }, {
-        key: "setSurroundModeToPureDirect",
-        value: function setSurroundModeToPureDirect() {
-            this._setSurroundMode("s_pure");
+    };
+    /**
+     * Switch eco mode off.
+     */
+    AVR.prototype.ecoOff = function () {
+        if (this.hasEco() === true) {
+            this._ecoCommand("eco_off");
         }
-
-        /**
-         * Sets the surround mode to stereo.
-         */
-    }, {
-        key: "setSurroundModeToStereo",
-        value: function setSurroundModeToStereo() {
-            this._setSurroundMode("s_stereo");
+    };
+    /**
+     * Switch eco mode to auto.
+     */
+    AVR.prototype.ecoAuto = function () {
+        if (this.hasEco() === true) {
+            this._ecoCommand("eco_auto");
         }
-
-        /**
-         * Sets the surround mode to automatic.
-         */
-    }, {
-        key: "setSurroundModeToAuto",
-        value: function setSurroundModeToAuto() {
-            this._setSurroundMode("s_auto");
+    };
+    /**
+     * Get the current eco Mode from the AVR.
+     */
+    AVR.prototype._getAvrEcoStatus = function () {
+        if (this.hasEco() === true) {
+            this._ecoCommand("eco_request");
         }
-
-        /**
-         * Sets the surround mode to neural.
-         */
-    }, {
-        key: "setSurroundModeToNeural",
-        value: function setSurroundModeToNeural() {
-            this._setSurroundMode("s_neural");
-        }
-
-        /**
-         * Sets the surround mode to standard.
-         */
-    }, {
-        key: "setSurroundModeToStandard",
-        value: function setSurroundModeToStandard() {
-            this._setSurroundMode("s_standard");
-        }
-
-        /**
-         * Sets the surround mode to dolby.
-         */
-    }, {
-        key: "setSurroundModeToDolby",
-        value: function setSurroundModeToDolby() {
-            this._setSurroundMode("s_dolby");
-        }
-
-        /**
-         * Sets the surround mode to dts.
-         */
-    }, {
-        key: "setSurroundModeToDts",
-        value: function setSurroundModeToDts() {
-            this._setSurroundMode("s_dts");
-        }
-
-        /**
-         * Sets the surround mode to multi chn stereo.
-         */
-    }, {
-        key: "setSurroundModeToMultiChnStereo",
-        value: function setSurroundModeToMultiChnStereo() {
-            this._setSurroundMode("s_mchstereo");
-        }
-
-        /**
-         * Sets the surround mode to matrix.
-         */
-    }, {
-        key: "setSurroundModeToMatrix",
-        value: function setSurroundModeToMatrix() {
-            this._setSurroundMode("s_matrix");
-        }
-
-        /**
-         * Sets the surround mode to virtual.
-         */
-    }, {
-        key: "setSurroundModeToVirtual",
-        value: function setSurroundModeToVirtual() {
-            this._setSurroundMode("s_virtual");
-        }
-
-        /**
-         * Sets the surround mode to left.
-         */
-    }, {
-        key: "setSurroundModeToLeft",
-        value: function setSurroundModeToLeft() {
-            this._setSurroundMode("s_left");
-        }
-
-        /**
-         * Sets the surround mode to right.
-         */
-    }, {
-        key: "setSurroundModeToRight",
-        value: function setSurroundModeToRight() {
-            this._setSurroundMode("s_right");
-        }
-
-        /**
-         * Gets the avr surround mode.
-         * @private
-         */
-    }, {
-        key: "_getAVRSurroundMode",
-        value: function _getAVRSurroundMode() {
-            this._setSurroundMode("s_request");
-        }
-
-        /**
-         * Returns the i18n ident string of the current surround mode of the AVR.
-         * The string should be used to get the i18n string from locales/<lang>.json
-         * Current stored mute status is used.
-         *
-         * @return     {string}  The i18n ident string as defined in the conf/<type>.json file.
-         */
-    }, {
-        key: "getSurroundMode",
-        value: function getSurroundMode() {
-
-            var retStr = "error.cmdnf";
-
-            for (var I = 0; I < this.conf.surround.length; I++) {
-
-                if (this.surroundMode === this.conf.surround[I].command) {
-                    retStr = this.conf.surround[I].i18n;
-                    break;
-                }
-            }
-
-            return retStr;
-        }
-
-        /*********************************************************************
-         * ECO methods
-         *********************************************************************/
-
-        /**
-         * Finds the command of the requested eco action and fills the send buffer.
-         *
-         * @param      {string}  cmd     The 'prog_id' string of the requested command.
-         * @private
-         */
-    }, {
-        key: "_ecoMode",
-        value: function _ecoMode(cmd) {
-            for (var I = 0; I < this.conf.eco.length; I++) {
-                // If 'test' is set don't filter if the command is valid for
-                // this type of AVR.
-                if (this.test === 1) {
-                    if (this.conf.eco[I].prog_id === cmd) {
-                        this._insertIntoSendBuffer(this.conf.eco[I].command);
-                    }
-                } else {
-                    if (this.conf.eco[I].prog_id === cmd && this.conf.eco[I].valid === true) {
-
-                        this._insertIntoSendBuffer(this.conf.eco[I].command);
-                    }
-                }
+    };
+    AVR.prototype.geti18nEcoMode = function () {
+        var retStr = "error.cmdnf";
+        for (var I = 0; I < this.conf.eco.length; I++) {
+            if (this.ecoStatus === this.conf.eco[I].command) {
+                retStr = this.conf.eco[I].i18n;
+                break;
             }
         }
-
-        /**
-         * Gets the supported eco commands for this type of AVR.
-         *
-         * @return     {Array}  The array with valid eco commands.
-         */
-    }, {
-        key: "getValidEcoCommands",
-        value: function getValidEcoCommands() {
-            return this.ecoAr;
-        }
-
-        /**
-         * Fill the command into the send buffer and start the send loop.
-         *
-         * @param      {string}  command  The eco command string
-         */
-    }, {
-        key: "sendEcoCommand",
-        value: function sendEcoCommand(command) {
-            if (command !== "ECO_UN_SUPPORTED") {
-                this._insertIntoSendBuffer(command);
-            } else {
-                this._d("Eco is unsupported for the device.");
-            }
-        }
-
-        /**
-         * Check if the AVR support the 'eco' commands.
-         *
-         * @return     {boolean}  True if has eco, False otherwise.
-         */
-    }, {
-        key: "hasEco",
-        value: function hasEco() {
-            if (this.conf.eco[0].valid === true) {
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        /**
-         * Switch eco mode on
-         */
-    }, {
-        key: "ecoOn",
-        value: function ecoOn() {
-            this._ecoMode("eco_on");
-        }
-
-        /**
-         * Switch eco mode off
-         */
-    }, {
-        key: "ecoOff",
-        value: function ecoOff() {
-            this._ecoMode("eco_off");
-        }
-
-        /**
-         * Switch eco mode to auto
-         */
-    }, {
-        key: "ecoAuto",
-        value: function ecoAuto() {
-            this._ecoMode("eco_auto");
-        }
-
-        /**
-         * Gets the avr eco status.
-         * @private
-         */
-    }, {
-        key: "_getAVREcoStatus",
-        value: function _getAVREcoStatus() {
-            this._ecoMode("eco_request");
-        }
-
-        /**
-         * Returns the i18n ident string of the current eco mode of the AVR.
-         * The string should be used to get the i18n string from locales/<lang>.json
-         * Current stored mute status is used.
-         *
-         * @return     {string}  The i18n ident string as defined in the conf/<type>.json file.
-         */
-    }, {
-        key: "getEcoMode",
-        value: function getEcoMode() {
-
-            var retStr = "error.cmdnf";
-
-            for (var I = 0; I < this.conf.eco.length; I++) {
-
-                if (this.ecoStatus === this.conf.eco[I].command) {
-                    retStr = this.conf.eco[I].i18n;
-                    break;
-                }
-            }
-
-            return retStr;
-        }
-    }]);
-
-    return Avr;
-})();
-
-module.exports = Avr;
+        return retStr;
+    };
+    return AVR;
+}());
+exports.AVR = AVR;
+//# sourceMappingURL=avr.js.map

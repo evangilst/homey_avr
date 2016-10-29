@@ -1,10 +1,10 @@
 {
-  "id": "nl.evgilst.homeyavr",
+  "id": "nl.evgilst.marantzavr",
   "name": {
-    "en": "homeyavr",
-    "nl": "homeyavr"
+    "en": "marantzavr",
+    "nl": "marantzavr"
   },
-  "version": "1.1.0",
+  "version": "1.1.1",
   "compatibility": "0.x || 1.x",
   "author": {
     "name": "Evert van Gilst",
